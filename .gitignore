@@ -1,0 +1,15 @@
+# Local secrets / config
+config.php
+
+# Logs
+*.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Dependencies (none required, but just in case)
+/vendor/
