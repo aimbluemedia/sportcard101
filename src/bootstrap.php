@@ -11,14 +11,26 @@ declare(strict_types=1);
 define('VIPSVAULT_ROOT', dirname(__DIR__));
 
 // --- Config ---
-$configFile = VIPSVAULT_ROOT . '/config.php';
-if (!is_file($configFile)) {
+// config.php lives in the admin/ folder. (A project-root config.php is also
+// accepted as a fallback for older layouts.)
+$configCandidates = [
+    VIPSVAULT_ROOT . '/admin/config.php',
+    VIPSVAULT_ROOT . '/config.php',
+];
+$configFile = null;
+foreach ($configCandidates as $candidate) {
+    if (is_file($candidate)) {
+        $configFile = $candidate;
+        break;
+    }
+}
+if ($configFile === null) {
     if (PHP_SAPI === 'cli') {
-        fwrite(STDERR, "Missing config.php. Run: cp config.sample.php config.php\n");
+        fwrite(STDERR, "Missing admin/config.php. Run: cp admin/config.sample.php admin/config.php\n");
         exit(1);
     }
     http_response_code(500);
-    exit('Missing config.php — copy config.sample.php to config.php and set your values.');
+    exit('Missing admin/config.php — copy admin/config.sample.php to admin/config.php and set your values.');
 }
 $config = require $configFile;
 

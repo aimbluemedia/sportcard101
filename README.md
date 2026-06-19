@@ -39,9 +39,9 @@ Built with **PHP 8** + **MySQL/MariaDB** — no framework, no build step.
 ## Setup
 
 ```bash
-# 1. Configure
-cp config.sample.php config.php
-#   edit config.php — set DB credentials, and eBay API keys if you have them
+# 1. Configure (config lives in the admin/ folder)
+cp admin/config.sample.php admin/config.php
+#   edit admin/config.php — set DB credentials, and eBay API keys if you have them
 
 # 2. Create the database
 mysql -u root -e "CREATE DATABASE vipsvault CHARACTER SET utf8mb4;"
@@ -63,7 +63,7 @@ directory so only that folder is web-accessible (config and source stay private)
 
 1. Sign in at https://developer.ebay.com/ and create an application keyset.
 2. Copy the **Client ID** (App ID) and **Client Secret** (Cert ID) into
-   `config.php` under `ebay`.
+   `admin/config.php` under `ebay`.
 3. That's it — the app uses the OAuth2 *client-credentials* flow to fetch an
    application token automatically; no user consent step required for searching.
 
@@ -80,7 +80,7 @@ Run the CLI scanner on a schedule so deals are found and emailed automatically:
 */15 * * * *  php /path/to/vipsvault/bin/scan.php >> /var/log/vipsvault.log 2>&1
 ```
 
-Enable email in `config.php` (`mail.enabled = true`, set `mail.to`) to receive a
+Enable email in `admin/config.php` (`mail.enabled = true`, set `mail.to`) to receive a
 digest whenever new deals appear. Email uses PHP's `mail()`; for Gmail/SMTP,
 configure your server's mail transport or an SMTP relay.
 
@@ -89,7 +89,9 @@ configure your server's mail transport or an SMTP relay.
 ## Project layout
 
 ```
-config.sample.php      Configuration template (copy to config.php)
+admin/                 Private config folder (blocked from web by .htaccess)
+  config.sample.php    Configuration template (copy to config.php)
+  config.php           Your real config — git-ignored
 schema.sql             MySQL schema
 public/                Web root — the only folder that should be exposed
   index.php            Dashboard / deals feed
@@ -116,4 +118,4 @@ bin/
 - Passwords are stored with `password_hash()` (bcrypt).
 - Forms are CSRF-protected; sessions use `HttpOnly`/`SameSite` cookies and are
   regenerated on login.
-- `config.php` is git-ignored so credentials are never committed.
+- `admin/config.php` is git-ignored so credentials are never committed.

@@ -1,4 +1,5 @@
 # Local secrets / config
+admin/config.php
 config.php
 
 # Logs
