@@ -11,10 +11,11 @@
 return [
     // --- Database (MySQL / MariaDB) ---
     'db' => [
-        'host'     => getenv('DB_HOST') ?: '127.0.0.1',
+        // On shared hosting (e.g. Hostinger) host is usually 'localhost'.
+        'host'     => getenv('DB_HOST') ?: 'localhost',
         'port'     => (int)(getenv('DB_PORT') ?: 3306),
-        'name'     => getenv('DB_NAME') ?: 'vipsvault',
-        'user'     => getenv('DB_USER') ?: 'root',
+        'name'     => getenv('DB_NAME') ?: 'u312278121_adminvip',
+        'user'     => getenv('DB_USER') ?: 'u312278121_adminvip',
         'password' => getenv('DB_PASS') ?: '',
         'charset'  => 'utf8mb4',
     ],
