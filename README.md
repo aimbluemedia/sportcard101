@@ -39,9 +39,9 @@ Built with **PHP 8** + **MySQL/MariaDB** — no framework, no build step.
 ## Setup
 
 ```bash
-# 1. Configure (config lives in the admin/ folder)
-cp admin/config.sample.php admin/config.php
-#   edit admin/config.php — set DB credentials, and eBay API keys if you have them
+# 1. Configure
+cp config.sample.php config.php
+#   edit config.php — set DB credentials, and eBay API keys if you have them
 
 # 2. Create the database
 mysql -u root -e "CREATE DATABASE vipsvault CHARACTER SET utf8mb4;"
@@ -49,13 +49,20 @@ mysql -u root -e "CREATE DATABASE vipsvault CHARACTER SET utf8mb4;"
 # 3. Import schema + create your login (username, password, [email])
 php bin/install.php admin 'your-strong-password' you@example.com
 
-# 4. Serve the public/ directory
-php -S 127.0.0.1:8000 -t public
+# 4. Serve the app
+php -S 127.0.0.1:8000
 #   then open http://127.0.0.1:8000/login.php
 ```
 
-In production, point your web server's document root at the **`public/`**
-directory so only that folder is web-accessible (config and source stay private).
+### Deploying to a subdomain (e.g. admin.vipsvault.com on shared hosting)
+
+The whole app runs from a **single folder** — the subdomain's document root.
+
+1. Upload everything in this repo into the subdomain's document root folder
+   (the folder hPanel created for `admin.vipsvault.com`).
+2. The included `.htaccess` files keep `config.php`, `schema.sql`, and the
+   `src/` and `bin/` directories private — only the app pages are served.
+3. Create `config.php` and run the installer (or use phpMyAdmin — see below).
 
 ---
 
@@ -89,23 +96,24 @@ configure your server's mail transport or an SMTP relay.
 ## Project layout
 
 ```
-admin/                 Private config folder (blocked from web by .htaccess)
-  config.sample.php    Configuration template (copy to config.php)
-  config.php           Your real config — git-ignored
-schema.sql             MySQL schema
-public/                Web root — the only folder that should be exposed
-  index.php            Dashboard / deals feed
-  searches.php         Manage saved searches
-  scan.php             "Scan now" action
-  login.php logout.php Authentication
-  assets/style.css
-src/                   Application code (kept outside web root)
+.htaccess              Web-root rules (protects config/schema/code)
+index.php              Dashboard / deals feed
+searches.php           Manage saved searches
+scan.php               "Scan now" action
+login.php logout.php   Authentication
+assets/style.css
+config.sample.php      Configuration template (copy to config.php)
+config.php             Your real config — git-ignored, blocked from web
+schema.sql             MySQL schema (blocked from web)
+src/                   Application code — included by PHP, blocked from web
+  .htaccess            Deny-all
   bootstrap.php        Config, autoloader, session, DB
   Database.php  Auth.php
   EbayClient.php       eBay Browse API client (+ mock fallback)
   DealFinder.php       Scan + baseline + deal detection
   Notifier.php         Email notifications
-bin/
+bin/                   CLI scripts — blocked from web
+  .htaccess            Deny-all
   install.php          One-time setup (schema + admin user)
   scan.php             Cron scanner
 ```

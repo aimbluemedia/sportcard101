@@ -1,0 +1,38 @@
+# vipsvault — application web root (e.g. admin.vipsvault.com)
+
+DirectoryIndex index.php
+
+# Send unauthenticated visitors to the login page when they hit "/".
+# (index.php already redirects, this is just a friendly default.)
+
+# --- Protect sensitive files from direct web access ---
+<FilesMatch "\.(sql|md|sample\.php|json|lock|log)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<Files "config.php">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</Files>
+
+# Hide dotfiles (.gitignore, .htaccess itself is protected by the server)
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
