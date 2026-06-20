@@ -101,3 +101,16 @@ form.stack input, form.stack select {
 .mock-note { background: rgba(255,176,0,.1); border: 1px solid var(--accent); color: var(--accent);
     padding: 10px 14px; border-radius: 8px; font-size: .85rem; margin-bottom: 20px; }
 .foot { text-align: center; color: var(--muted); padding: 30px; font-size: .82rem; }
+
+/* AI Opportunity Engine */
+.deal.v-buy { border-color: var(--green); }
+.deal.v-pass { opacity: .82; }
+.ai-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; font-size: .78rem; }
+.verdict { font-weight: 800; padding: 2px 8px; border-radius: 6px; letter-spacing: .03em; }
+.verdict-buy { background: var(--green); color: #fff; }
+.verdict-watch { background: var(--accent); color: #1a1200; }
+.verdict-pass { background: var(--panel-2); color: var(--muted); }
+.ai-row .conf, .ai-row .flip { color: var(--muted); }
+.ai-row .gem { color: var(--accent); font-weight: 700; }
+.ai-reason { font-size: .85rem; color: var(--text); background: var(--panel-2); border-left: 3px solid var(--accent);
+    padding: 6px 10px; border-radius: 0 6px 6px 0; margin-top: 8px; }

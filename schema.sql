@@ -57,6 +57,13 @@ CREATE TABLE IF NOT EXISTS listings (
     baseline_price DECIMAL(10,2) DEFAULT NULL,
     discount_pct   DECIMAL(6,2)  DEFAULT NULL,
     is_deal        TINYINT(1)   NOT NULL DEFAULT 0,
+    -- AI Opportunity Engine output:
+    ai_verdict     VARCHAR(8)   DEFAULT NULL, -- BUY | WATCH | PASS
+    ai_confidence  TINYINT UNSIGNED DEFAULT NULL, -- 0-100
+    ai_card        VARCHAR(255) DEFAULT NULL, -- canonical card identity
+    ai_reason      VARCHAR(512) DEFAULT NULL, -- beginner-friendly rationale
+    ai_flip_pct    DECIMAL(6,2) DEFAULT NULL, -- estimated flip margin after fees
+    ai_hidden_gem  TINYINT(1)   NOT NULL DEFAULT 0, -- mislabeled / overlooked find
     -- Has the user been notified about this deal already?
     notified       TINYINT(1)   NOT NULL DEFAULT 0,
     first_seen_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

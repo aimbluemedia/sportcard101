@@ -6,6 +6,7 @@ require __DIR__ . '/src/layout.php';
 
 use Vipsvault\Auth;
 use Vipsvault\EbayClient;
+use Vipsvault\AiAnalyst;
 use Vipsvault\DealFinder;
 use Vipsvault\Notifier;
 
@@ -17,7 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 csrf_verify();
 
 $ebay   = new EbayClient($config['ebay']);
-$finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100));
+$ai     = new AiAnalyst($config['ai']);
+$finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 $notifier = new Notifier($pdo, $config['mail']);
 
 try {

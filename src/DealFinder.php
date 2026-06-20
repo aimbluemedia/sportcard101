@@ -14,7 +14,8 @@ final class DealFinder
     public function __construct(
         private PDO $pdo,
         private EbayClient $ebay,
-        private int $scanLimit = 100
+        private int $scanLimit = 100,
+        private ?AiAnalyst $ai = null
     ) {}
 
     /**
@@ -47,6 +48,7 @@ final class DealFinder
         $maxPrice  = $search['max_price'] !== null ? (float)$search['max_price'] : null;
 
         $newDeals = [];
+        $dealCandidates = [];
 
         foreach ($listings as $l) {
             $discount = $baseline > 0 ? round((($baseline - $l['price']) / $baseline) * 100, 2) : 0.0;
@@ -55,13 +57,35 @@ final class DealFinder
             $wasDealBefore = $this->existingDealFlag((int)$search['id'], $l['ebay_item_id']);
             $this->upsertListing((int)$search['id'], $l, $baseline, $discount, $isDeal);
 
-            // A "new deal" is one that is a deal now but wasn't flagged before.
-            if ($isDeal && $wasDealBefore !== 1) {
+            if ($isDeal) {
                 $row = $l;
                 $row['baseline_price'] = $baseline;
                 $row['discount_pct']   = $discount;
-                $newDeals[] = $row;
+                $dealCandidates[] = $row;
+
+                // A "new deal" is one that is a deal now but wasn't flagged before.
+                if ($wasDealBefore !== 1) {
+                    $newDeals[] = $row;
+                }
             }
+        }
+
+        // AI Opportunity Engine: assess the deal candidates and persist verdicts.
+        if ($this->ai && $dealCandidates) {
+            $analyses = $this->ai->analyze($dealCandidates, [
+                'keywords' => $search['keywords'],
+                'grade'    => $search['grade'],
+            ]);
+            foreach ($analyses as $itemId => $a) {
+                $this->saveAi((int)$search['id'], (string)$itemId, $a);
+            }
+            // Attach AI verdicts to new deals so notifications can include them.
+            foreach ($newDeals as &$nd) {
+                if (isset($analyses[$nd['ebay_item_id']])) {
+                    $nd['ai'] = $analyses[$nd['ebay_item_id']];
+                }
+            }
+            unset($nd);
         }
 
         $this->markScanned((int)$search['id']);
@@ -154,6 +178,25 @@ final class DealFinder
             ':baseline'  => $baseline,
             ':discount'  => $discount,
             ':is_deal'   => $isDeal ? 1 : 0,
+        ]);
+    }
+
+    /** Persist the AI Opportunity Engine's assessment for one listing. */
+    private function saveAi(int $searchId, string $itemId, array $a): void
+    {
+        $sql = 'UPDATE listings SET
+                    ai_verdict = :verdict, ai_confidence = :confidence, ai_card = :card,
+                    ai_reason = :reason, ai_flip_pct = :flip, ai_hidden_gem = :gem
+                WHERE search_id = :sid AND ebay_item_id = :item';
+        $this->pdo->prepare($sql)->execute([
+            ':verdict'    => in_array($a['verdict'] ?? '', ['BUY', 'WATCH', 'PASS'], true) ? $a['verdict'] : null,
+            ':confidence' => isset($a['confidence']) ? (int)$a['confidence'] : null,
+            ':card'       => isset($a['canonical_card']) ? mb_substr((string)$a['canonical_card'], 0, 250) : null,
+            ':reason'     => isset($a['reason']) ? mb_substr((string)$a['reason'], 0, 500) : null,
+            ':flip'       => isset($a['est_flip_margin_pct']) ? (float)$a['est_flip_margin_pct'] : null,
+            ':gem'        => !empty($a['hidden_gem']) ? 1 : 0,
+            ':sid'        => $searchId,
+            ':item'       => $itemId,
         ]);
     }
 

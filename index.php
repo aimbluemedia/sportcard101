@@ -6,11 +6,13 @@ require __DIR__ . '/src/layout.php';
 
 use Vipsvault\Auth;
 use Vipsvault\EbayClient;
+use Vipsvault\AiAnalyst;
 
 Auth::require();
 
 $uid  = Auth::userId();
 $ebay = new EbayClient($config['ebay']);
+$ai   = new AiAnalyst($config['ai']);
 
 // Filter: show all deals, or only one search.
 $searchFilter = isset($_GET['search']) ? (int)$_GET['search'] : 0;
@@ -30,7 +32,9 @@ if ($searchFilter) {
     $sql .= ' AND l.search_id = ?';
     $params[] = $searchFilter;
 }
-$sql .= ' ORDER BY l.discount_pct DESC, l.last_seen_at DESC LIMIT 200';
+// AI-first ordering: BUY verdicts, then hidden gems, then biggest discount.
+$sql .= " ORDER BY (l.ai_verdict = 'BUY') DESC, l.ai_hidden_gem DESC,
+                   l.discount_pct DESC, l.last_seen_at DESC LIMIT 200";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $deals = $stmt->fetchAll();
@@ -40,13 +44,14 @@ $hasSearches = count($searches) > 0;
 
 layout_header('Deals');
 ?>
-<h1>💰 Best deals</h1>
-<p class="sub">PSA 10 listings priced below their market baseline. Sorted by biggest discount.</p>
+<h1>💰 AI deal opportunities</h1>
+<p class="sub">Listings below market, scored by the AI Opportunity Engine — best buys and hidden gems first.</p>
 
-<?php if ($ebay->isMock()): ?>
+<?php if ($ebay->isMock() || $ai->isMock()): ?>
 <div class="mock-note">
-    ⚠️ Running in <strong>MOCK mode</strong> — showing sample data. Add your eBay API
-    credentials to <code>config.php</code> to scan live listings.
+    ⚠️ <strong>MOCK mode:</strong>
+    <?php if ($ebay->isMock()): ?> eBay data is sample data (add eBay API keys to <code>config.php</code>).<?php endif; ?>
+    <?php if ($ai->isMock()): ?> AI scoring is heuristic (add <code>ANTHROPIC_API_KEY</code> for real AI analysis).<?php endif; ?>
 </div>
 <?php endif; ?>
 
@@ -75,15 +80,33 @@ layout_header('Deals');
             <?php
                 $discount = $d['discount_pct'] !== null ? rtrim(rtrim(number_format((float)$d['discount_pct'], 1), '0'), '.') : '0';
             ?>
-            <div class="deal is-deal">
+            <?php $verdict = $d['ai_verdict'] ?? null; ?>
+            <div class="deal is-deal<?= $verdict ? ' v-' . strtolower($verdict) : '' ?>">
                 <span class="badge">−<?= e($discount) ?>%</span>
                 <?php if ($d['image_url']): ?>
                     <img src="<?= e($d['image_url']) ?>" alt="" loading="lazy">
                 <?php endif; ?>
                 <div class="info">
-                    <div class="title"><?= e($d['title']) ?></div>
+                    <?php if ($verdict): ?>
+                        <div class="ai-row">
+                            <span class="verdict verdict-<?= e(strtolower($verdict)) ?>"><?= e($verdict) ?></span>
+                            <?php if ((int)$d['ai_confidence'] > 0): ?>
+                                <span class="conf"><?= (int)$d['ai_confidence'] ?>% conf</span>
+                            <?php endif; ?>
+                            <?php if (!empty($d['ai_hidden_gem'])): ?>
+                                <span class="gem">💎 hidden gem</span>
+                            <?php endif; ?>
+                            <?php if ($d['ai_flip_pct'] !== null): ?>
+                                <span class="flip">~<?= rtrim(rtrim(number_format((float)$d['ai_flip_pct'], 1), '0'), '.') ?>% flip</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <div class="title"><?= e($d['ai_card'] ?: $d['title']) ?></div>
                     <div class="price"><?= money((float)$d['price'], $d['currency']) ?></div>
                     <div class="baseline">market ≈ <?= money((float)$d['baseline_price'], $d['currency']) ?> · <?= e($d['search_label']) ?></div>
+                    <?php if (!empty($d['ai_reason'])): ?>
+                        <div class="ai-reason">🤖 <?= e($d['ai_reason']) ?></div>
+                    <?php endif; ?>
                     <div class="meta">
                         <?php if ($d['buying_option'] === 'AUCTION'): ?>
                             <span>🔨 <?= (int)$d['bid_count'] ?> bids</span>

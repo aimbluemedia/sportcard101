@@ -42,6 +42,16 @@ return [
         'campaign_id'   => getenv('EBAY_CAMPAIGN_ID') ?: '',
     ],
 
+    // --- AI (Anthropic Claude) — powers the buy/sell Opportunity Engine ---
+    // Get a key at https://console.anthropic.com/. Leave blank to run the AI
+    // in MOCK mode (heuristic scoring, no API calls).
+    'ai' => [
+        'api_key' => getenv('ANTHROPIC_API_KEY') ?: '',
+        'model'   => getenv('ANTHROPIC_MODEL') ?: 'claude-opus-4-8',
+        // Max deal listings sent to the AI per search scan (cost control).
+        'max_per_scan' => (int)(getenv('AI_MAX_PER_SCAN') ?: 15),
+    ],
+
     // --- Email notifications (optional) ---
     // Uses PHP's mail() by default. For Gmail/SMTP, configure your server's
     // sendmail or set up an SMTP relay. Leave 'to' blank to disable email.

@@ -11,15 +11,19 @@ declare(strict_types=1);
 require __DIR__ . '/../src/bootstrap.php';
 
 use Vipsvault\EbayClient;
+use Vipsvault\AiAnalyst;
 use Vipsvault\DealFinder;
 use Vipsvault\Notifier;
 
 $ebay     = new EbayClient($config['ebay']);
-$finder   = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100));
+$ai       = new AiAnalyst($config['ai']);
+$finder   = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 $notifier = new Notifier($pdo, $config['mail']);
 
 $started = date('Y-m-d H:i:s');
-echo "[{$started}] vipsvault scan starting" . ($ebay->isMock() ? ' (MOCK mode)' : '') . "\n";
+echo "[{$started}] vipsvault scan starting"
+    . ($ebay->isMock() ? ' (eBay MOCK)' : '')
+    . ($ai->isMock() ? ' (AI MOCK)' : '') . "\n";
 
 // Scan every user.
 $users = $pdo->query('SELECT id, username FROM users')->fetchAll();

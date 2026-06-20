@@ -79,6 +79,29 @@ attribution on the outbound listing links.
 
 ---
 
+## AI Opportunity Engine
+
+The scanner runs deal candidates through Claude to surface buy/sell
+opportunities that are hard to spot manually:
+
+- **Canonical card** — normalises messy eBay titles to one clean identity so
+  prices actually compare.
+- **Verdict** — BUY / WATCH / PASS with a confidence score.
+- **Hidden gems** — listings that stay cheap because they're misspelled,
+  miscategorised, or missing key terms ("rookie", grade) — bargains normal
+  searches miss.
+- **Flip margin** — estimated profit vs. baseline after ~13% eBay fees.
+- **Beginner reason** — one plain-English sentence per listing.
+
+Add an Anthropic API key (`ANTHROPIC_API_KEY`, or `ai.api_key` in `config.php`)
+from https://console.anthropic.com/ to enable real AI analysis. With no key it
+runs in **MOCK mode** using heuristic scoring, so the whole UI still works.
+Model defaults to `claude-opus-4-8`.
+
+> **Upgrading an existing install?** The AI fields are new columns on
+> `listings`. Re-import `schema.sql` (it's idempotent for tables) or run the
+> `ALTER TABLE listings ADD COLUMN ai_*` statements to add them.
+
 ## Automated scanning (cron)
 
 Run the CLI scanner on a schedule so deals are found and emailed automatically:
