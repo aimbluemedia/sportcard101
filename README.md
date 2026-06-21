@@ -1,4 +1,4 @@
-# 🏆 vipsvault
+# 🃏 sportscard101
 
 A password-protected web app that scans **eBay** for **PSA 10 graded sports
 cards**, detects the best-priced auctions, and notifies you with everything you
@@ -44,7 +44,7 @@ cp config.sample.php config.php
 #   edit config.php — set DB credentials, and eBay API keys if you have them
 
 # 2. Create the database
-mysql -u root -e "CREATE DATABASE vipsvault CHARACTER SET utf8mb4;"
+mysql -u root -e "CREATE DATABASE sportscard101 CHARACTER SET utf8mb4;"
 
 # 3. Import schema + create your login (username, password, [email])
 php bin/install.php admin 'your-strong-password' you@example.com
@@ -54,12 +54,12 @@ php -S 127.0.0.1:8000
 #   then open http://127.0.0.1:8000/login.php
 ```
 
-### Deploying to a subdomain (e.g. admin.vipsvault.com on shared hosting)
+### Deploying to a subdomain (e.g. sportscard101.com on shared hosting)
 
 The whole app runs from a **single folder** — the subdomain's document root.
 
 1. Upload everything in this repo into the subdomain's document root folder
-   (the folder hPanel created for `admin.vipsvault.com`).
+   (the folder hPanel created for `sportscard101.com`).
 2. The included `.htaccess` files keep `config.php`, `schema.sql`, and the
    `src/` and `bin/` directories private — only the app pages are served.
 3. Create `config.php` and run the installer (or use phpMyAdmin — see below).
@@ -107,7 +107,7 @@ Model defaults to `claude-opus-4-8`.
 Run the CLI scanner on a schedule so deals are found and emailed automatically:
 
 ```cron
-*/15 * * * *  php /path/to/vipsvault/bin/scan.php >> /var/log/vipsvault.log 2>&1
+*/15 * * * *  php /path/to/sportscard101/bin/scan.php >> /var/log/sportscard101.log 2>&1
 ```
 
 Enable email in `admin/config.php` (`mail.enabled = true`, set `mail.to`) to receive a

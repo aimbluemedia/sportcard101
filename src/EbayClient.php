@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Vipsvault;
+namespace Sportscard101;
 
 /**
  * Minimal client for the eBay Browse API (item_summary/search).

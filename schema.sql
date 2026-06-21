@@ -1,6 +1,6 @@
--- vipsvault database schema (MySQL / MariaDB)
+-- sportscard101 database schema (MySQL / MariaDB)
 --
---   mysql -u root vipsvault < schema.sql
+--   mysql -u root sportscard101 < schema.sql
 --
 -- All tables use utf8mb4 so card titles with any characters store cleanly.
 

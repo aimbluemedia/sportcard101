@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Vipsvault;
+namespace Sportscard101;
 
 /**
  * AI Opportunity Engine — uses Claude to assess sports-card listings for

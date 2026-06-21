@@ -4,7 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/src/bootstrap.php';
 require __DIR__ . '/src/layout.php';
 
-use Vipsvault\Auth;
+use Sportscard101\Auth;
 
 if (Auth::check()) {
     redirect('index.php');
@@ -28,8 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 layout_header('Log in', showNav: false);
 ?>
 <div class="login-wrap">
-    <span class="brand">🏆 vips<span style="color:var(--accent)">vault</span></span>
-    <p class="sub" style="text-align:center">eBay PSA 10 deal scanner</p>
+    <span class="brand">🃏 Sportscard<span style="color:var(--accent)">101</span></span>
+    <p class="sub" style="text-align:center">Learn to spot and flip card deals with AI</p>
     <div class="card">
         <?php if ($error): ?><div class="flash flash-error"><?= e($error) ?></div><?php endif; ?>
         <form method="post" class="stack">

@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../src/bootstrap.php';
 
-use Vipsvault\Auth;
+use Sportscard101\Auth;
 
 if ($argc < 3) {
     fwrite(STDERR, "Usage: php bin/install.php <username> <password> [email]\n");
@@ -23,7 +23,7 @@ if ($argc < 3) {
 $email = $argv[3] ?? null;
 
 // Import schema (idempotent — uses CREATE TABLE IF NOT EXISTS).
-$schema = file_get_contents(VIPSVAULT_ROOT . '/schema.sql');
+$schema = file_get_contents(APP_ROOT . '/schema.sql');
 if ($schema === false) {
     fwrite(STDERR, "Could not read schema.sql\n");
     exit(1);

@@ -8,13 +8,13 @@ declare(strict_types=1);
  * Every entry point (public/*.php, bin/*.php) requires this file first.
  */
 
-define('VIPSVAULT_ROOT', dirname(__DIR__));
+define('APP_ROOT', dirname(__DIR__));
 
 // --- Config ---
 // config.php lives in the application root (next to index.php).
 $configCandidates = [
-    VIPSVAULT_ROOT . '/config.php',
-    VIPSVAULT_ROOT . '/admin/config.php', // legacy layout fallback
+    APP_ROOT . '/config.php',
+    APP_ROOT . '/admin/config.php', // legacy layout fallback
 ];
 $configFile = null;
 foreach ($configCandidates as $candidate) {
@@ -35,9 +35,9 @@ $config = require $configFile;
 
 date_default_timezone_set($config['app']['timezone'] ?? 'UTC');
 
-// --- Autoloader for Vipsvault\* classes ---
+// --- Autoloader for Sportscard101\* classes ---
 spl_autoload_register(function (string $class): void {
-    $prefix = 'Vipsvault\\';
+    $prefix = 'Sportscard101\\';
     if (str_starts_with($class, $prefix)) {
         $file = __DIR__ . '/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
         if (is_file($file)) {
@@ -49,7 +49,7 @@ spl_autoload_register(function (string $class): void {
 require __DIR__ . '/helpers.php';
 
 // --- Database ---
-$pdo = \Vipsvault\Database::connect($config['db']);
+$pdo = \Sportscard101\Database::connect($config['db']);
 
 // --- Session (web only) ---
 if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
@@ -58,6 +58,6 @@ if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
         'samesite' => 'Lax',
         'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
     ]);
-    session_name('vipsvault');
+    session_name('sportscard101');
     session_start();
 }

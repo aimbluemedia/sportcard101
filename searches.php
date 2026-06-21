@@ -4,7 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/src/bootstrap.php';
 require __DIR__ . '/src/layout.php';
 
-use Vipsvault\Auth;
+use Sportscard101\Auth;
 
 Auth::require();
 $uid = Auth::userId();

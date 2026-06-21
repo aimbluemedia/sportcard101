@@ -4,11 +4,11 @@ declare(strict_types=1);
 require __DIR__ . '/src/bootstrap.php';
 require __DIR__ . '/src/layout.php';
 
-use Vipsvault\Auth;
-use Vipsvault\EbayClient;
-use Vipsvault\AiAnalyst;
-use Vipsvault\DealFinder;
-use Vipsvault\Notifier;
+use Sportscard101\Auth;
+use Sportscard101\EbayClient;
+use Sportscard101\AiAnalyst;
+use Sportscard101\DealFinder;
+use Sportscard101\Notifier;
 
 Auth::require();
 

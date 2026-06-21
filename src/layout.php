@@ -7,19 +7,19 @@ declare(strict_types=1);
 
 function layout_header(string $title, bool $showNav = true): void
 {
-    $user = \Vipsvault\Auth::username();
+    $user = \Sportscard101\Auth::username();
     ?><!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($title) ?> · vipsvault</title>
+    <title><?= e($title) ?> · Sportscard101</title>
     <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <?php if ($showNav): ?>
 <header class="topbar">
-    <a class="brand" href="index.php">🏆 vips<span>vault</span></a>
+    <a class="brand" href="index.php">🃏 Sportscard<span>101</span></a>
     <nav>
         <a href="index.php">Deals</a>
         <a href="searches.php">Searches</a>
@@ -47,7 +47,7 @@ function layout_footer(): void
 {
     ?>
 </main>
-<footer class="foot">vipsvault — eBay PSA 10 deal scanner</footer>
+<footer class="foot">Sportscard101 — AI card deal engine</footer>
 </body>
 </html>
 <?php

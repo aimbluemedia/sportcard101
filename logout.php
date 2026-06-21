@@ -3,5 +3,5 @@ declare(strict_types=1);
 
 require __DIR__ . '/src/bootstrap.php';
 
-\Vipsvault\Auth::logout();
+\Sportscard101\Auth::logout();
 redirect('login.php');
