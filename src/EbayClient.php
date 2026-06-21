@@ -46,7 +46,14 @@ final class EbayClient
             $this->token();
             return [true, 'Connected to ' . $this->apiBase . ' — OAuth token acquired successfully.'];
         } catch (\Throwable $e) {
-            return [false, $e->getMessage()];
+            $msg = $e->getMessage();
+            if (str_contains($msg, 'invalid_client')) {
+                $msg .= '  →  The App ID + Cert ID must be a PRODUCTION eBay Developer keyset '
+                      . '(from developer.ebay.com), entered in the Advanced fields. Your EPN '
+                      . 'Account SID / Auth Token are NOT the Browse API keys. Also check you are '
+                      . 'not mixing Sandbox keys with the production endpoint.';
+            }
+            return [false, $msg];
         }
     }
 
@@ -118,7 +125,7 @@ final class EbayClient
         }
 
         $url  = $this->oauthBase . '/identity/v1/oauth2/token';
-        $auth = base64_encode($this->cfg['client_id'] . ':' . $this->cfg['client_secret']);
+        $auth = base64_encode(trim((string)$this->cfg['client_id']) . ':' . trim((string)$this->cfg['client_secret']));
         $body = http_build_query([
             'grant_type' => 'client_credentials',
             'scope'      => 'https://api.ebay.com/oauth/api_scope',
