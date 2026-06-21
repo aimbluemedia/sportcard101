@@ -1,44 +1,124 @@
--- sportscard101 database schema (MySQL / MariaDB)
+-- sportcard101 database schema (MySQL / MariaDB)
 --
---   mysql -u root sportscard101 < schema.sql
+--   mysql -u root sportcard101 < schema.sql
 --
--- All tables use utf8mb4 so card titles with any characters store cleanly.
+-- utf8mb4 throughout so card titles / lesson content store cleanly.
 
 SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
+-- ---------------------------------------------------------------- Accounts
+-- One table, role-based. superadmin logs in at /superadmin, members at /.
 CREATE TABLE IF NOT EXISTS users (
     id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
     username      VARCHAR(64)  NOT NULL,
+    email         VARCHAR(190) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    email         VARCHAR(190) DEFAULT NULL,
-    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    role          ENUM('superadmin','member') NOT NULL DEFAULT 'member',
+    status        ENUM('active','suspended')  NOT NULL DEFAULT 'active',
+    -- Subscription (kept in sync with Stripe via webhook):
+    plan_id            INT UNSIGNED DEFAULT NULL,
+    sub_status         ENUM('none','trialing','active','past_due','canceled') NOT NULL DEFAULT 'none',
+    trial_ends_at      DATETIME DEFAULT NULL,
+    stripe_customer_id VARCHAR(64) DEFAULT NULL,
+    stripe_sub_id      VARCHAR(64) DEFAULT NULL,
+    -- Affiliate program:
+    affiliate_code VARCHAR(16) DEFAULT NULL,  -- this member's own referral code
+    referred_by    VARCHAR(16) DEFAULT NULL,  -- affiliate_code that referred them
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uniq_username (username)
+    UNIQUE KEY uniq_username (username),
+    UNIQUE KEY uniq_email (email),
+    UNIQUE KEY uniq_affiliate (affiliate_code),
+    KEY idx_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Saved searches define what the scanner looks for on eBay.
+-- ---------------------------------------------------------------- Plans / pricing
+CREATE TABLE IF NOT EXISTS plans (
+    id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    name           VARCHAR(80)  NOT NULL,
+    slug           VARCHAR(80)  NOT NULL,
+    price_cents    INT UNSIGNED NOT NULL DEFAULT 0,
+    bill_interval  ENUM('month','year') NOT NULL DEFAULT 'month',
+    stripe_price_id VARCHAR(64) DEFAULT NULL,
+    blurb          VARCHAR(255) DEFAULT NULL,
+    features       TEXT DEFAULT NULL,          -- one feature per line
+    is_active      TINYINT(1)   NOT NULL DEFAULT 1,
+    sort           INT NOT NULL DEFAULT 0,
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_slug (slug)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------- School content (CMS)
+CREATE TABLE IF NOT EXISTS content_modules (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    title        VARCHAR(190) NOT NULL,
+    slug         VARCHAR(190) NOT NULL,
+    summary      VARCHAR(512) DEFAULT NULL,
+    sort         INT NOT NULL DEFAULT 0,
+    is_published TINYINT(1) NOT NULL DEFAULT 0,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_slug (slug)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS content_lessons (
+    id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    module_id    INT UNSIGNED NOT NULL,
+    title        VARCHAR(190) NOT NULL,
+    body         MEDIUMTEXT DEFAULT NULL,
+    video_url    VARCHAR(512) DEFAULT NULL,
+    is_free      TINYINT(1) NOT NULL DEFAULT 0,  -- visible to free tier as a preview
+    is_published TINYINT(1) NOT NULL DEFAULT 0,
+    sort         INT NOT NULL DEFAULT 0,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_module (module_id),
+    CONSTRAINT fk_lesson_module FOREIGN KEY (module_id) REFERENCES content_modules (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------- Site settings (key/value)
+CREATE TABLE IF NOT EXISTS settings (
+    skey  VARCHAR(64) NOT NULL,
+    sval  TEXT DEFAULT NULL,
+    PRIMARY KEY (skey)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------- Affiliate referrals
+CREATE TABLE IF NOT EXISTS referrals (
+    id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    affiliate_user_id INT UNSIGNED NOT NULL,
+    referred_user_id  INT UNSIGNED NOT NULL,
+    reward_cents      INT NOT NULL DEFAULT 0,
+    status            ENUM('pending','credited','void') NOT NULL DEFAULT 'pending',
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_affiliate (affiliate_user_id),
+    CONSTRAINT fk_ref_aff FOREIGN KEY (affiliate_user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_ref_user FOREIGN KEY (referred_user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------- AI scanner (admin-curated)
+-- Saved searches define what the deal scanner hunts on eBay. Owned by the
+-- superadmin; members view the resulting deals.
 CREATE TABLE IF NOT EXISTS searches (
     id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id        INT UNSIGNED NOT NULL,
     label          VARCHAR(190) NOT NULL,
     keywords       VARCHAR(255) NOT NULL,
     grade          VARCHAR(32)  NOT NULL DEFAULT 'PSA 10',
-    -- Only consider listings at or below this price (NULL = no cap).
     max_price      DECIMAL(10,2) DEFAULT NULL,
-    -- Flag a deal when price is this %% (or more) below the market baseline.
     threshold_pct  TINYINT UNSIGNED NOT NULL DEFAULT 25,
-    -- Restrict to auctions, fixed price, or both.
     buying_option  ENUM('AUCTION','FIXED_PRICE','ANY') NOT NULL DEFAULT 'AUCTION',
-    active         TINYINT(1)   NOT NULL DEFAULT 1,
+    active          TINYINT(1)  NOT NULL DEFAULT 1,
     last_scanned_at DATETIME    DEFAULT NULL,
-    created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_user (user_id),
     CONSTRAINT fk_search_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Snapshot of every listing seen for a search, with computed deal metrics.
 CREATE TABLE IF NOT EXISTS listings (
     id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     search_id      INT UNSIGNED NOT NULL,
@@ -53,18 +133,15 @@ CREATE TABLE IF NOT EXISTS listings (
     item_url       VARCHAR(1024) NOT NULL,
     item_condition VARCHAR(128) DEFAULT NULL,
     seller         VARCHAR(190) DEFAULT NULL,
-    -- Computed at scan time:
     baseline_price DECIMAL(10,2) DEFAULT NULL,
     discount_pct   DECIMAL(6,2)  DEFAULT NULL,
     is_deal        TINYINT(1)   NOT NULL DEFAULT 0,
-    -- AI Opportunity Engine output:
-    ai_verdict     VARCHAR(8)   DEFAULT NULL, -- BUY | WATCH | PASS
-    ai_confidence  TINYINT UNSIGNED DEFAULT NULL, -- 0-100
-    ai_card        VARCHAR(255) DEFAULT NULL, -- canonical card identity
-    ai_reason      VARCHAR(512) DEFAULT NULL, -- beginner-friendly rationale
-    ai_flip_pct    DECIMAL(6,2) DEFAULT NULL, -- estimated flip margin after fees
-    ai_hidden_gem  TINYINT(1)   NOT NULL DEFAULT 0, -- mislabeled / overlooked find
-    -- Has the user been notified about this deal already?
+    ai_verdict     VARCHAR(8)   DEFAULT NULL,
+    ai_confidence  TINYINT UNSIGNED DEFAULT NULL,
+    ai_card        VARCHAR(255) DEFAULT NULL,
+    ai_reason      VARCHAR(512) DEFAULT NULL,
+    ai_flip_pct    DECIMAL(6,2) DEFAULT NULL,
+    ai_hidden_gem  TINYINT(1)   NOT NULL DEFAULT 0,
     notified       TINYINT(1)   NOT NULL DEFAULT 0,
     first_seen_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_seen_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

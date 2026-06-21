@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sportscard101;
+namespace SportCard101;
 
 /**
  * AI Opportunity Engine — uses Claude to assess sports-card listings for

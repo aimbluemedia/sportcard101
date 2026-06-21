@@ -2,39 +2,64 @@
 declare(strict_types=1);
 
 /**
- * Shared HTML layout. Pages call layout_header($title) then layout_footer().
+ * Shared HTML layout for all three areas: public site, /member, /superadmin.
+ * Uses root-absolute URLs so it works from any folder depth.
  */
 
-function layout_header(string $title, bool $showNav = true): void
+function nav_links(string $area): array
 {
-    $user = \Sportscard101\Auth::username();
+    return match ($area) {
+        'member' => [
+            ['/member/', 'Dashboard'],
+            ['/member/deals.php', 'AI Deals'],
+            ['/member/learn.php', 'Learn'],
+            ['/member/account.php', 'Account'],
+        ],
+        'admin' => [
+            ['/superadmin/', 'Dashboard'],
+            ['/superadmin/members.php', 'Members'],
+            ['/superadmin/pricing.php', 'Pricing'],
+            ['/superadmin/content.php', 'Content'],
+            ['/superadmin/searches.php', 'AI App'],
+            ['/superadmin/settings.php', 'Settings'],
+        ],
+        default => [
+            ['/', 'Home'],
+            ['/#features', 'Features'],
+            ['/#pricing', 'Pricing'],
+            ['/login.php', 'Log in'],
+        ],
+    };
+}
+
+function layout_header(string $title, string $area = 'public'): void
+{
+    $home = $area === 'admin' ? '/superadmin/' : ($area === 'member' ? '/member/' : '/');
     ?><!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= e($title) ?> · Sportscard101</title>
-    <link rel="stylesheet" href="assets/style.css">
+    <title><?= e($title) ?> · SportCard101</title>
+    <link rel="stylesheet" href="/assets/style.css">
 </head>
-<body>
-<?php if ($showNav): ?>
+<body class="area-<?= e($area) ?>">
 <header class="topbar">
-    <a class="brand" href="index.php">🃏 Sportscard<span>101</span></a>
+    <a class="brand" href="<?= e($home) ?>">🃏 Sport<span>Card101</span><?php if ($area === 'admin'): ?> <small>admin</small><?php endif; ?></a>
     <nav>
-        <a href="index.php">Deals</a>
-        <a href="searches.php">Searches</a>
-        <form method="post" action="scan.php" class="inline">
-            <?= csrf_field() ?>
-            <button type="submit" class="btn btn-scan">⟳ Scan now</button>
-        </form>
-        <span class="user"><?= e($user) ?></span>
-        <a class="logout" href="logout.php">Log out</a>
+        <?php foreach (nav_links($area) as [$href, $label]): ?>
+            <a href="<?= e($href) ?>"><?= e($label) ?></a>
+        <?php endforeach; ?>
+        <?php if ($area === 'public'): ?>
+            <a class="btn btn-primary btn-sm" href="/signup.php">Join free</a>
+        <?php else: ?>
+            <span class="user"><?= e(\SportCard101\Auth::username()) ?></span>
+            <a class="logout" href="/logout.php">Log out</a>
+        <?php endif; ?>
     </nav>
 </header>
-<?php endif; ?>
 <main class="container">
 <?php
-    // Flash message support.
     if (!empty($_SESSION['flash'])) {
         foreach ($_SESSION['flash'] as $f) {
             echo '<div class="flash flash-' . e($f['type']) . '">' . e($f['msg']) . '</div>';
@@ -47,7 +72,7 @@ function layout_footer(): void
 {
     ?>
 </main>
-<footer class="foot">Sportscard101 — AI card deal engine</footer>
+<footer class="foot">SportCard101 — learn the hobby, find the deals · <a href="/">sportcard101.com</a></footer>
 </body>
 </html>
 <?php

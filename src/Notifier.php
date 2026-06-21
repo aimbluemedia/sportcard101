@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sportscard101;
+namespace SportCard101;
 
 use PDO;
 
@@ -38,7 +38,7 @@ final class Notifier
     private function emailDigest(array $deals): void
     {
         $count   = count($deals);
-        $subject = "Sportscard101: {$count} new PSA 10 deal" . ($count === 1 ? '' : 's');
+        $subject = "SportCard101: {$count} new PSA 10 deal" . ($count === 1 ? '' : 's');
 
         $lines = ["You have {$count} new deal" . ($count === 1 ? '' : 's') . " to consider:\n"];
         foreach ($deals as $d) {
@@ -52,7 +52,7 @@ final class Notifier
         }
         $body = implode("\n", $lines);
 
-        $headers = 'From: ' . ($this->mailCfg['from'] ?? 'sportscard101@localhost') . "\r\n"
+        $headers = 'From: ' . ($this->mailCfg['from'] ?? 'sportcard101@localhost') . "\r\n"
                  . "Content-Type: text/plain; charset=UTF-8\r\n";
 
         @mail($this->mailCfg['to'], $subject, $body, $headers);

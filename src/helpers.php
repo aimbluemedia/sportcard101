@@ -2,7 +2,8 @@
 declare(strict_types=1);
 
 /**
- * Small view/helper functions used across the app.
+ * Small view/helper functions shared across the public site, member area,
+ * and superadmin area.
  */
 
 /** HTML-escape a value for safe output. */
@@ -20,13 +21,11 @@ function csrf_token(): string
     return $_SESSION['csrf'];
 }
 
-/** Render a hidden CSRF input for forms. */
 function csrf_field(): string
 {
     return '<input type="hidden" name="csrf" value="' . e(csrf_token()) . '">';
 }
 
-/** Verify a submitted CSRF token; aborts on mismatch. */
 function csrf_verify(): void
 {
     $sent = $_POST['csrf'] ?? '';
@@ -36,14 +35,13 @@ function csrf_verify(): void
     }
 }
 
-/** Redirect helper. */
 function redirect(string $path): never
 {
     header('Location: ' . $path);
     exit;
 }
 
-/** Format money for display. */
+/** Format dollars from a float. */
 function money(?float $amount, string $currency = 'USD'): string
 {
     if ($amount === null) {
@@ -51,6 +49,38 @@ function money(?float $amount, string $currency = 'USD'): string
     }
     $symbol = ['USD' => '$', 'GBP' => '£', 'EUR' => '€', 'CAD' => 'C$', 'AUD' => 'A$'][$currency] ?? '';
     return $symbol . number_format($amount, 2);
+}
+
+/** Format dollars from an integer number of cents. */
+function money_cents(int $cents): string
+{
+    return '$' . number_format($cents / 100, $cents % 100 === 0 ? 0 : 2);
+}
+
+/** URL-safe slug. */
+function slugify(string $s): string
+{
+    $s = strtolower(trim($s));
+    $s = preg_replace('/[^a-z0-9]+/', '-', $s) ?? '';
+    return trim($s, '-') ?: 'item';
+}
+
+/** Read a site setting (key/value table), with a per-request cache. */
+function setting(string $key, ?string $default = null): ?string
+{
+    static $cache = null;
+    global $pdo;
+    if ($cache === null) {
+        $cache = [];
+        try {
+            foreach ($pdo->query('SELECT skey, sval FROM settings')->fetchAll() as $r) {
+                $cache[$r['skey']] = $r['sval'];
+            }
+        } catch (\Throwable $e) {
+            // settings table may not exist yet during install
+        }
+    }
+    return $cache[$key] ?? $default;
 }
 
 /** Human-friendly "time left" for an auction end time (UTC string). */
@@ -64,8 +94,7 @@ function time_left(?string $endTimeUtc): string
     } catch (\Exception $e) {
         return '—';
     }
-    $now  = new DateTime('now', new DateTimeZone('UTC'));
-    $secs = $end->getTimestamp() - $now->getTimestamp();
+    $secs = $end->getTimestamp() - (new DateTime('now', new DateTimeZone('UTC')))->getTimestamp();
     if ($secs <= 0) {
         return 'ended';
     }

@@ -1,6 +1,6 @@
 <?php
 /**
- * sportscard101 configuration sample.
+ * sportcard101 configuration sample.
  *
  * Copy this file to config.php and fill in your values:
  *     cp config.sample.php config.php
@@ -58,7 +58,7 @@ return [
     'mail' => [
         'enabled' => (bool)(getenv('MAIL_ENABLED') ?: false),
         'to'      => getenv('MAIL_TO') ?: '',
-        'from'    => getenv('MAIL_FROM') ?: 'sportscard101@localhost',
+        'from'    => getenv('MAIL_FROM') ?: 'sportcard101@localhost',
     ],
 
     // --- Default deal rules ---

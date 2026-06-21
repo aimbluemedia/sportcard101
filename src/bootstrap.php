@@ -35,9 +35,9 @@ $config = require $configFile;
 
 date_default_timezone_set($config['app']['timezone'] ?? 'UTC');
 
-// --- Autoloader for Sportscard101\* classes ---
+// --- Autoloader for SportCard101\* classes ---
 spl_autoload_register(function (string $class): void {
-    $prefix = 'Sportscard101\\';
+    $prefix = 'SportCard101\\';
     if (str_starts_with($class, $prefix)) {
         $file = __DIR__ . '/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
         if (is_file($file)) {
@@ -49,7 +49,7 @@ spl_autoload_register(function (string $class): void {
 require __DIR__ . '/helpers.php';
 
 // --- Database ---
-$pdo = \Sportscard101\Database::connect($config['db']);
+$pdo = \SportCard101\Database::connect($config['db']);
 
 // --- Session (web only) ---
 if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
@@ -58,6 +58,6 @@ if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
         'samesite' => 'Lax',
         'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
     ]);
-    session_name('sportscard101');
+    session_name('sportcard101');
     session_start();
 }

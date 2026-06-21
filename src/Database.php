@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sportscard101;
+namespace SportCard101;
 
 use PDO;
 use PDOException;

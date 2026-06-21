@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Sportscard101;
+namespace SportCard101;
 
 /**
  * Minimal client for the eBay Browse API (item_summary/search).
