@@ -15,7 +15,7 @@ use SportCard101\AiAnalyst;
 use SportCard101\DealFinder;
 use SportCard101\Notifier;
 
-$ebay     = new EbayClient($config['ebay']);
+$ebay     = new EbayClient(ebay_config($config['ebay']));
 $ai       = new AiAnalyst($config['ai']);
 $finder   = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 $notifier = new Notifier($pdo, $config['mail']);

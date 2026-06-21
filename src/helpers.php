@@ -83,6 +83,26 @@ function setting(string $key, ?string $default = null): ?string
     return $cache[$key] ?? $default;
 }
 
+/**
+ * Build the eBay client config, preferring values saved in the admin Settings
+ * (DB) and falling back to config.php. Lets the superadmin manage keys in the UI.
+ */
+function ebay_config(array $fileCfg): array
+{
+    $endpoint = setting('ebay_endpoint', 'https://api.ebay.com') ?: 'https://api.ebay.com';
+    return [
+        'client_id'     => setting('ebay_app_id', (string)($fileCfg['client_id'] ?? '')),
+        'client_secret' => setting('ebay_cert_id', (string)($fileCfg['client_secret'] ?? '')),
+        'dev_id'        => setting('ebay_dev_id', ''),
+        'marketplace'   => setting('ebay_marketplace', (string)($fileCfg['marketplace'] ?? 'EBAY_US')),
+        'campaign_id'   => setting('ebay_campaign_id', (string)($fileCfg['campaign_id'] ?? '')),
+        'custom_id'     => setting('ebay_custom_id', ''),
+        'endpoint'      => $endpoint,
+        'environment'   => str_contains($endpoint, 'sandbox') ? 'sandbox' : 'production',
+        'cache_hours'   => (int)(setting('ebay_cache_hours', '12') ?? 12),
+    ];
+}
+
 /** Human-friendly "time left" for an auction end time (UTC string). */
 function time_left(?string $endTimeUtc): string
 {

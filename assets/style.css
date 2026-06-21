@@ -175,3 +175,5 @@ form.stack textarea { width: 100%; padding: 10px 12px; border-radius: 8px; borde
 .checkbox { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-weight: 600; }
 .checkbox input { width: auto; }
 .copy-field { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--accent); font-size: .85rem; }
+.field-help { color: var(--muted); font-size: .8rem; margin: 4px 0 6px; }
+hr { border: none; border-top: 1px solid var(--border); }

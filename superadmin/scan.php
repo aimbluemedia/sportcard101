@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 csrf_verify();
 
-$ebay   = new EbayClient($config['ebay']);
+$ebay   = new EbayClient(ebay_config($config['ebay']));
 $ai     = new AiAnalyst($config['ai']);
 $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 $notifier = new Notifier($pdo, $config['mail']);

@@ -10,7 +10,7 @@ use SportCard101\AiAnalyst;
 
 Auth::requireAdmin();
 
-$ebay = new EbayClient($config['ebay']);
+$ebay = new EbayClient(ebay_config($config['ebay']));
 $ai   = new AiAnalyst($config['ai']);
 
 $deals = $pdo->query(

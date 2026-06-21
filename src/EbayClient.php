@@ -20,8 +20,13 @@ final class EbayClient
 
     public function __construct(private array $cfg)
     {
-        $sandbox = ($cfg['environment'] ?? 'production') === 'sandbox';
-        $this->apiBase   = $sandbox ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com';
+        $endpoint = trim((string)($cfg['endpoint'] ?? ''));
+        if ($endpoint !== '') {
+            $this->apiBase = rtrim($endpoint, '/');
+        } else {
+            $sandbox = ($cfg['environment'] ?? 'production') === 'sandbox';
+            $this->apiBase = $sandbox ? 'https://api.sandbox.ebay.com' : 'https://api.ebay.com';
+        }
         $this->oauthBase = $this->apiBase;
         $this->mock      = empty($cfg['client_id']) || empty($cfg['client_secret']);
     }
@@ -29,6 +34,20 @@ final class EbayClient
     public function isMock(): bool
     {
         return $this->mock;
+    }
+
+    /** Verify the configured keys by acquiring an OAuth application token. */
+    public function testConnection(): array
+    {
+        if ($this->mock) {
+            return [false, 'Missing App ID or Cert ID — enter both, Save, then test.'];
+        }
+        try {
+            $this->token();
+            return [true, 'Connected to ' . $this->apiBase . ' — OAuth token acquired successfully.'];
+        } catch (\Throwable $e) {
+            return [false, $e->getMessage()];
+        }
     }
 
     /**
@@ -72,7 +91,11 @@ final class EbayClient
             'Content-Type: application/json',
         ];
         if (!empty($this->cfg['campaign_id'])) {
-            $headers[] = 'X-EBAY-C-ENDUSERCTX: affiliateCampaignId=' . $this->cfg['campaign_id'];
+            $ctx = 'affiliateCampaignId=' . $this->cfg['campaign_id'];
+            if (!empty($this->cfg['custom_id'])) {
+                $ctx .= ',affiliateReferenceId=' . $this->cfg['custom_id'];
+            }
+            $headers[] = 'X-EBAY-C-ENDUSERCTX: ' . $ctx;
         }
 
         $url  = $this->apiBase . '/buy/browse/v1/item_summary/search?' . http_build_query($params);
@@ -175,7 +198,7 @@ final class EbayClient
             'buying_option'  => $buying,
             'end_time'       => $end,
             'image_url'      => $item['image']['imageUrl'] ?? ($item['thumbnailImages'][0]['imageUrl'] ?? null),
-            'item_url'       => (string)($item['itemWebUrl'] ?? $item['itemAffiliateWebUrl'] ?? ''),
+            'item_url'       => (string)($item['itemAffiliateWebUrl'] ?? $item['itemWebUrl'] ?? ''),
             'item_condition' => $item['condition'] ?? null,
             'seller'         => $item['seller']['username'] ?? null,
         ];
