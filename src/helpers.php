@@ -93,7 +93,8 @@ function ebay_config(array $fileCfg): array
     return [
         'client_id'     => setting('ebay_app_id', (string)($fileCfg['client_id'] ?? '')),
         'client_secret' => setting('ebay_cert_id', (string)($fileCfg['client_secret'] ?? '')),
-        'dev_id'        => setting('ebay_dev_id', ''),
+        'account_sid'   => setting('ebay_account_sid', ''),
+        'auth_token'    => setting('ebay_auth_token', ''),
         'marketplace'   => setting('ebay_marketplace', (string)($fileCfg['marketplace'] ?? 'EBAY_US')),
         'campaign_id'   => setting('ebay_campaign_id', (string)($fileCfg['campaign_id'] ?? '')),
         'custom_id'     => setting('ebay_custom_id', ''),
