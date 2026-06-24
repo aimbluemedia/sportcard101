@@ -92,7 +92,7 @@ layout_header('Sold Today', 'admin');
             <td><span class="verdict verdict-<?= $s['grade'] === 'PSA 10' ? 'buy' : 'watch' ?>"><?= e($s['grade']) ?></span></td>
             <td><strong><?= money((float)$s['price'], $s['currency']) ?></strong></td>
             <td><?= $s['sold_date'] ? e(date('M j, g:ia', strtotime($s['sold_date']))) : '—' ?></td>
-            <td><?php if ($s['item_url']): ?><a class="btn btn-sm" href="<?= e($s['item_url']) ?>" target="_blank" rel="noopener">View</a><?php endif; ?></td>
+            <td><?php if ($s['item_url']): ?><a class="btn btn-sm" href="<?= e(epn_link($s['item_url'])) ?>" target="_blank" rel="noopener">View</a><?php endif; ?></td>
         </tr>
     <?php endforeach; ?>
     </tbody>

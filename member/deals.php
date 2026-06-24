@@ -61,7 +61,7 @@ layout_header('AI Deals', 'member');
                         <?php else: ?><span>🏷️ Buy It Now</span><?php endif; ?>
                     </div>
                     <div class="actions">
-                        <a class="btn btn-primary btn-sm" href="<?= e($d['item_url']) ?>" target="_blank" rel="noopener">Bid on eBay →</a>
+                        <a class="btn btn-primary btn-sm" href="<?= e(epn_link($d['item_url'])) ?>" target="_blank" rel="noopener">Bid on eBay →</a>
                     </div>
                 </div>
             </div>

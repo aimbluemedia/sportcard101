@@ -61,7 +61,7 @@ layout_header('AI Deals', 'admin');
                     <div class="price"><?= money((float)$d['price'], $d['currency']) ?></div>
                     <div class="baseline">market ≈ <?= money((float)$d['baseline_price'], $d['currency']) ?> · <?= e($d['search_label']) ?></div>
                     <?php if (!empty($d['ai_reason'])): ?><div class="ai-reason">🤖 <?= e($d['ai_reason']) ?></div><?php endif; ?>
-                    <div class="actions"><a class="btn btn-primary btn-sm" href="<?= e($d['item_url']) ?>" target="_blank" rel="noopener">View on eBay →</a></div>
+                    <div class="actions"><a class="btn btn-primary btn-sm" href="<?= e(epn_link($d['item_url'])) ?>" target="_blank" rel="noopener">View on eBay →</a></div>
                 </div>
             </div>
         <?php endforeach; ?>

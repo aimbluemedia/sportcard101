@@ -23,6 +23,7 @@ $epnFields = [
     'ebay_account_sid' => ['Account SID', 'From your eBay Partner Network API credentials (the screen with Account SID / Auth Token / Reset Token).'],
     'ebay_auth_token'  => ['Auth Token', 'Your eBay Partner Network Auth Token. Keep it secret — if it leaks, click "Reset Token" in EPN.'],
     'ebay_campaign_id' => ['ePN Campaign ID', 'Your eBay Partner Network campid — stamps affiliate tracking onto deal links. It is NOT your App ID.'],
+    'ebay_rotation_id' => ['Tracking Rotation ID (advanced)', 'Optional. eBay Partner rotation id (mkrid). Leave blank to auto-pick by marketplace.'],
     'ebay_custom_id'   => ['Affiliate Reference ID / Custom ID', 'Optional tracking label. eBay calls this customid / SUB-ID.'],
     'ebay_marketplace' => ['Marketplace ID', 'Examples: EBAY_US, EBAY_GB, EBAY_CA, EBAY_AU.'],
     'ebay_endpoint'    => ['API Endpoint', 'Live: https://api.ebay.com  ·  Sandbox: https://api.sandbox.ebay.com'],

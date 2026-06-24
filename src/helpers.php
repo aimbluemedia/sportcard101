@@ -104,6 +104,62 @@ function ebay_config(array $fileCfg): array
     ];
 }
 
+/**
+ * Wrap an eBay URL with eBay Partner Network affiliate tracking, using the
+ * Campaign ID / Custom ID saved in admin Settings. Works for any eBay item or
+ * search URL — no API call required (this is EPN's standard link format).
+ * Returns the URL unchanged if no Campaign ID is set or it's already tracked.
+ */
+function epn_link(string $url): string
+{
+    $url = trim($url);
+    if ($url === '' || !str_contains($url, 'ebay.')) {
+        return $url;
+    }
+    if (str_contains($url, 'campid=')) {
+        return $url; // already an affiliate link
+    }
+    $campid = (string) setting('ebay_campaign_id', '');
+    if ($campid === '') {
+        return $url; // tracking not configured yet
+    }
+
+    // siteid + rotation id (mkrid) pair, by marketplace. Override via setting.
+    $mp = (string) setting('ebay_marketplace', 'EBAY_US');
+    [$siteid, $mkrid] = match ($mp) {
+        'EBAY_GB' => ['3', '710-53481-19255-0'],
+        'EBAY_CA' => ['2', '706-53473-19255-0'],
+        'EBAY_AU' => ['15', '705-53470-19255-0'],
+        default   => ['0', '711-53200-19255-0'], // EBAY_US
+    };
+    $rot = (string) setting('ebay_rotation_id', '');
+    if ($rot !== '') {
+        $mkrid = $rot;
+    }
+
+    $params = [
+        'mkcid'  => '1',          // eBay Partner Network
+        'mkrid'  => $mkrid,
+        'siteid' => $siteid,
+        'campid' => $campid,
+        'toolid' => '10001',
+        'mkevt'  => '1',
+    ];
+    $custom = (string) setting('ebay_custom_id', '');
+    if ($custom !== '') {
+        $params['customid'] = $custom;
+    }
+
+    return $url . (str_contains($url, '?') ? '&' : '?') . http_build_query($params);
+}
+
+/** Build a tracked eBay search URL for a keyword phrase. */
+function epn_search_link(string $keywords): string
+{
+    $base = 'https://www.ebay.com/sch/i.html?' . http_build_query(['_nkw' => $keywords]);
+    return epn_link($base);
+}
+
 /** Human-friendly "time left" for an auction end time (UTC string). */
 function time_left(?string $endTimeUtc): string
 {
