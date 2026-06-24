@@ -17,6 +17,8 @@ final class EbayClient
     private string $apiBase;
     private string $oauthBase;
     private bool $mock;
+    /** Set when a live sold lookup falls back to sample data, with the reason. */
+    public ?string $lastNotice = null;
 
     public function __construct(private array $cfg)
     {
@@ -116,19 +118,19 @@ final class EbayClient
         return array_map([$this, 'normalize'], $data['itemSummaries']);
     }
 
-    /** Obtain (and cache for the request) an application OAuth token. */
-    private function token(): string
+    /** Obtain (and cache per scope) an application OAuth token. */
+    private function token(string $scope = 'https://api.ebay.com/oauth/api_scope'): string
     {
-        static $cached = null;
-        if ($cached !== null) {
-            return $cached;
+        static $cache = [];
+        if (isset($cache[$scope])) {
+            return $cache[$scope];
         }
 
         $url  = $this->oauthBase . '/identity/v1/oauth2/token';
         $auth = base64_encode(trim((string)$this->cfg['client_id']) . ':' . trim((string)$this->cfg['client_secret']));
         $body = http_build_query([
             'grant_type' => 'client_credentials',
-            'scope'      => 'https://api.ebay.com/oauth/api_scope',
+            'scope'      => $scope,
         ]);
 
         $ch = curl_init($url);
@@ -155,7 +157,95 @@ final class EbayClient
             throw new \RuntimeException('eBay OAuth error (HTTP ' . $code . '): ' . $resp);
         }
 
-        return $cached = $data['access_token'];
+        return $cache[$scope] = $data['access_token'];
+    }
+
+    /**
+     * Search SOLD items via the Marketplace Insights API (last-sold data).
+     * NOTE: Marketplace Insights is a Limited Release API — your keyset must be
+     * granted access. If it isn't (or in mock mode), returns sample rows and
+     * sets $this->lastNotice with the reason.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public function searchSold(string $query, string $grade, string $fromIso, string $toIso, int $limit = 200): array
+    {
+        $fullQuery = trim($grade . ' ' . $query);
+
+        if ($this->mock) {
+            $this->lastNotice = 'Mock data — add a Production keyset to fetch real sold listings.';
+            return $this->mockSold($fullQuery, $grade, $limit);
+        }
+
+        try {
+            $token = $this->token('https://api.ebay.com/oauth/api_scope/buy.marketplace.insights');
+            $limit = max(1, min($limit, 200));
+            $params = [
+                'q'            => $fullQuery,
+                'limit'        => (string)$limit,
+                'category_ids' => '212', // Sports trading cards
+                'filter'       => 'lastSoldDate:[' . $fromIso . '..' . $toIso . ']',
+            ];
+            $headers = [
+                'Authorization: Bearer ' . $token,
+                'X-EBAY-C-MARKETPLACE-ID: ' . ($this->cfg['marketplace'] ?? 'EBAY_US'),
+                'Content-Type: application/json',
+            ];
+            $url  = $this->apiBase . '/buy/marketplace_insights/v1_beta/item_sales/search?' . http_build_query($params);
+            $resp = $this->httpGet($url, $headers);
+            $data = json_decode($resp, true);
+
+            if (!is_array($data) || !isset($data['itemSales'])) {
+                // API reachable but returned an error payload (often "access denied").
+                $this->lastNotice = 'Marketplace Insights returned no data — your keyset may not be granted access yet. Showing sample data.';
+                return $this->mockSold($fullQuery, $grade, $limit);
+            }
+            return array_map(fn ($i) => $this->normalizeSold($i, $grade), $data['itemSales']);
+        } catch (\Throwable $e) {
+            $this->lastNotice = 'Live sold lookup failed (' . $e->getMessage() . '). Showing sample data.';
+            return $this->mockSold($fullQuery, $grade, $limit);
+        }
+    }
+
+    private function normalizeSold(array $item, string $grade): array
+    {
+        return [
+            'title'      => (string)($item['title'] ?? ''),
+            'grade'      => $grade,
+            'price'      => isset($item['lastSoldPrice']['value']) ? (float)$item['lastSoldPrice']['value'] : 0.0,
+            'currency'   => $item['lastSoldPrice']['currency'] ?? 'USD',
+            'sold_date'  => $this->toMysqlDate($item['lastSoldDate'] ?? null),
+            'image_url'  => $item['image']['imageUrl'] ?? ($item['thumbnailImages'][0]['imageUrl'] ?? null),
+            'item_url'   => (string)($item['itemAffiliateWebUrl'] ?? $item['itemWebUrl'] ?? ''),
+            'condition'  => $item['condition'] ?? null,
+        ];
+    }
+
+    /** Deterministic sample sold rows for mock mode / no-access fallback. */
+    private function mockSold(string $query, string $grade, int $limit): array
+    {
+        $seed = crc32($query);
+        mt_srand($seed);
+        $base = 90 + ($seed % 700);
+        $players = ['Michael Jordan', 'Kobe Bryant', 'LeBron James', 'Tom Brady', 'Patrick Mahomes', 'Shohei Ohtani', 'Connor Bedard', 'Victor Wembanyama'];
+        $n = min($limit, 8);
+        $out = [];
+        for ($i = 0; $i < $n; $i++) {
+            $price = round($base * (0.6 + mt_rand(0, 120) / 100), 2);
+            $when  = (new \DateTime('now', new \DateTimeZone('UTC')))->modify('-' . mt_rand(0, 600) . ' minutes')->format('Y-m-d H:i:s');
+            $out[] = [
+                'title'     => $players[$i % count($players)] . ' ' . $grade . ' #' . mt_rand(1, 350),
+                'grade'     => $grade,
+                'price'     => $price,
+                'currency'  => 'USD',
+                'sold_date' => $when,
+                'image_url' => 'https://placehold.co/120x160?text=' . rawurlencode($grade),
+                'item_url'  => 'https://www.ebay.com/itm/' . abs($seed) . $i,
+                'condition' => 'Graded',
+            ];
+        }
+        mt_srand();
+        return $out;
     }
 
     private function httpGet(string $url, array $headers): string
