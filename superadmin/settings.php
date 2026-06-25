@@ -9,7 +9,10 @@ use SportCard101\EbayClient;
 
 Auth::requireAdmin();
 
-// Site / school settings.
+/*
+ * Settings groups. Keys map 1:1 to the `settings` table and to ebay_config()
+ * in src/helpers.php, which feeds the EbayClient used by the AI deal scanner.
+ */
 $siteFields = [
     'site_url'               => ['Site URL (for referral links)', 'text'],
     'hero_title'             => ['Homepage headline', 'text'],
@@ -18,27 +21,35 @@ $siteFields = [
     'enable_member_searches' => ['Let members run their own AI searches (1 = on, 0 = off)', 'text'],
 ];
 
-// eBay Partner Network (affiliate) — the credentials shown on EPN's API page.
+// eBay Partner Network — affiliate tracking (commission links).
 $epnFields = [
-    'ebay_account_sid' => ['Account SID', 'From your eBay Partner Network API credentials (the screen with Account SID / Auth Token / Reset Token).'],
-    'ebay_auth_token'  => ['Auth Token', 'Your eBay Partner Network Auth Token. Keep it secret — if it leaks, click "Reset Token" in EPN.'],
-    'ebay_campaign_id' => ['ePN Campaign ID', 'Your eBay Partner Network campid — stamps affiliate tracking onto deal links. It is NOT your App ID.'],
-    'ebay_rotation_id' => ['Tracking Rotation ID (advanced)', 'Optional. eBay Partner rotation id (mkrid). Leave blank to auto-pick by marketplace.'],
-    'ebay_custom_id'   => ['Affiliate Reference ID / Custom ID', 'Optional tracking label. eBay calls this customid / SUB-ID.'],
-    'ebay_marketplace' => ['Marketplace ID', 'Examples: EBAY_US, EBAY_GB, EBAY_CA, EBAY_AU.'],
-    'ebay_endpoint'    => ['API Endpoint', 'Live: https://api.ebay.com  ·  Sandbox: https://api.sandbox.ebay.com'],
+    'ebay_account_sid' => ['Account SID', 'From your eBay Partner Network API credentials (Account SID / Auth Token / Reset Token).'],
+    'ebay_auth_token'  => ['Auth Token', 'Your eBay Partner Network Auth Token. Secret — leave blank to keep the saved value.', 'secret'],
+    'ebay_campaign_id' => ['ePN Campaign ID', 'Your eBay Partner Network campid — stamps affiliate tracking on links. NOT your App ID.'],
+    'ebay_custom_id'   => ['Affiliate Reference ID / Custom ID', 'Optional tracking label (eBay calls this customid / SUB-ID).'],
+    'ebay_rotation_id' => ['Tracking Rotation ID (mkrid)', 'Optional. Leave blank to auto-pick by marketplace.'],
+];
+
+// eBay Developer Program — Browse API keyset that POWERS THE AI DEAL SCANNER.
+$devFields = [
+    'ebay_app_id'      => ['App ID / Client ID', 'Production App ID from developer.ebay.com (looks like Name-app-PRD-xxxx-xxxx).'],
+    'ebay_dev_id'      => ['Dev ID', 'From the same keyset. Stored to complete your keyset (Browse token flow does not send it).'],
+    'ebay_cert_id'     => ['Cert ID / Client Secret', 'Production Cert ID (starts with PRD-). Secret — leave blank to keep the saved value.', 'secret'],
+    'ebay_marketplace' => ['Marketplace ID', 'EBAY_US, EBAY_GB, EBAY_CA, EBAY_AU, …'],
+    'ebay_endpoint'    => ['API Endpoint', 'Live: https://api.ebay.com   ·   Sandbox: https://api.sandbox.ebay.com'],
     'ebay_cache_hours' => ['Cache Hours', 'How long to cache eBay results.'],
 ];
 
-// Browse API developer keyset — only needed to run the LIVE AI deal scanner.
-$browseFields = [
-    'ebay_app_id'  => ['App ID / Client ID', 'From the eBay Developer Program (Production). Required for live deal scanning.'],
-    'ebay_cert_id' => ['Cert ID / Client Secret', 'From the same Production keyset as the App ID. Required for live deal scanning.'],
+$allFields = $siteFields + $epnFields + $devFields;
+$secretKeys = ['ebay_auth_token', 'ebay_cert_id'];
+
+$defaults = [
+    'ebay_marketplace' => 'EBAY_US',
+    'ebay_endpoint'    => 'https://api.ebay.com',
+    'ebay_cache_hours' => '12',
 ];
 
-$allKeys = [...array_keys($siteFields), ...array_keys($epnFields), ...array_keys($browseFields)];
-
-// Test connection (uses currently SAVED settings).
+// Test the Browse keyset (powers the scanner) using the currently SAVED values.
 if (isset($_GET['test']) && $_GET['test'] === 'ebay') {
     [$ok, $msg] = (new EbayClient(ebay_config($config['ebay'])))->testConnection();
     flash($ok ? 'success' : 'error', 'eBay: ' . $msg);
@@ -48,13 +59,13 @@ if (isset($_GET['test']) && $_GET['test'] === 'ebay') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $stmt = $pdo->prepare('INSERT INTO settings (skey, sval) VALUES (?, ?) ON DUPLICATE KEY UPDATE sval = VALUES(sval)');
-    foreach ($allKeys as $key) {
+    foreach (array_keys($allFields) as $key) {
         $val = trim((string)($_POST[$key] ?? ''));
-        if ($key === 'ebay_marketplace' && $val === '') $val = 'EBAY_US';
-        if ($key === 'ebay_endpoint' && $val === '')    $val = 'https://api.ebay.com';
-        if ($key === 'ebay_cache_hours' && $val === '')  $val = '12';
-        // Don't wipe a stored Auth Token when the (masked) field is submitted blank.
-        if ($key === 'ebay_auth_token' && $val === '') {
+        if ($val === '' && isset($defaults[$key])) {
+            $val = $defaults[$key];
+        }
+        // Don't wipe a stored secret when its masked field is left blank.
+        if (in_array($key, $secretKeys, true) && $val === '') {
             continue;
         }
         $stmt->execute([$key, $val]);
@@ -63,52 +74,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/superadmin/settings.php');
 }
 
-$ebayDefault = fn (string $k) => $k === 'ebay_marketplace' ? 'EBAY_US' : ($k === 'ebay_endpoint' ? 'https://api.ebay.com' : ($k === 'ebay_cache_hours' ? '12' : ''));
-$tokenSet = setting('ebay_auth_token', '') !== '';
-
+/** Render one labelled field. */
 layout_header('Settings', 'admin');
 ?>
-<h1>Site settings</h1>
-<p class="sub">Homepage copy, community link, and feature flags members see.</p>
+<h1>Settings</h1>
+<p class="sub">Site copy, eBay Partner (affiliate) keys, and eBay Developer (Browse) keys for the AI deal scanner.</p>
 
-<form method="post" class="card" style="max-width:760px"><?= csrf_field() ?>
-    <?php foreach ($siteFields as $key => [$label, $type]): $val = setting($key, ''); ?>
+<form method="post" class="card" style="max-width:780px"><?= csrf_field() ?>
+
+    <h2 style="margin-top:0">Site</h2>
+    <?php foreach ($siteFields as $key => $def):
+        [$label, $type] = $def; $val = setting($key, ''); ?>
         <label><?= e($label) ?></label>
         <?php if ($type === 'textarea'): ?>
-            <textarea name="<?= e($key) ?>" rows="3"><?= e($val) ?></textarea>
+            <textarea name="<?= e($key) ?>" rows="3"><?= e((string)$val) ?></textarea>
         <?php else: ?>
-            <input name="<?= e($key) ?>" value="<?= e($val) ?>">
+            <input name="<?= e($key) ?>" value="<?= e((string)$val) ?>">
         <?php endif; ?>
     <?php endforeach; ?>
 
-    <hr style="margin:26px 0 6px">
-    <h2 style="margin-top:14px">🛒 eBay Partner Network</h2>
-    <p class="sub">Your EPN <strong>Account SID + Auth Token</strong> and Campaign ID. These power affiliate
-        tracking on deal links. (Running the live deal scanner also needs a Browse API keyset — see Advanced below.)</p>
-
-    <?php foreach ($epnFields as $key => [$label, $help]):
-        $isToken = $key === 'ebay_auth_token';
-        $val = $isToken ? '' : setting($key, $ebayDefault($key));
+    <hr style="margin:26px 0 8px">
+    <h2>🛒 eBay Partner Network <small style="color:var(--muted);font-weight:400">— affiliate tracking</small></h2>
+    <?php foreach ($epnFields as $key => $def):
+        [$label, $help] = [$def[0], $def[1] ?? ''];
+        $isSecret = in_array($key, $secretKeys, true);
+        $set = (string) setting($key, '') !== '';
     ?>
         <label><?= e($label) ?></label>
-        <input name="<?= e($key) ?>" value="<?= e($val) ?>"<?= $isToken ? ' type="password" autocomplete="off" placeholder="' . ($tokenSet ? '•••••••• (saved — leave blank to keep)' : 'paste your Auth Token') . '"' : '' ?>>
+        <?php if ($isSecret): ?>
+            <input name="<?= e($key) ?>" type="password" autocomplete="off" value="" placeholder="<?= $set ? '•••••••• (saved — leave blank to keep)' : 'paste value' ?>">
+        <?php else: ?>
+            <input name="<?= e($key) ?>" value="<?= e((string) setting($key, '')) ?>">
+        <?php endif; ?>
         <p class="field-help"><?= e($help) ?></p>
     <?php endforeach; ?>
 
-    <details style="margin-top:10px">
-        <summary style="cursor:pointer;font-weight:600">Advanced — Browse API keyset (only for live deal scanning)</summary>
-        <div style="margin-top:10px">
-            <?php foreach ($browseFields as $key => [$label, $help]):
-                $isSecret = $key === 'ebay_cert_id';
-            ?>
-                <label><?= e($label) ?></label>
-                <input name="<?= e($key) ?>" value="<?= e(setting($key, '')) ?>"<?= $isSecret ? ' type="password" autocomplete="off"' : '' ?>>
-                <p class="field-help"><?= e($help) ?></p>
-            <?php endforeach; ?>
-        </div>
-    </details>
+    <hr style="margin:26px 0 8px">
+    <h2>🔎 eBay Developer API <small style="color:var(--muted);font-weight:400">— powers the AI deal scanner</small></h2>
+    <p class="sub">Production keyset from <a href="https://developer.ebay.com/my/keys" target="_blank" rel="noopener">developer.ebay.com</a>. Required to scan live listings.</p>
+    <?php foreach ($devFields as $key => $def):
+        [$label, $help] = [$def[0], $def[1] ?? ''];
+        $isSecret = in_array($key, $secretKeys, true);
+        $set = (string) setting($key, '') !== '';
+        $val = setting($key, $defaults[$key] ?? '');
+    ?>
+        <label><?= e($label) ?></label>
+        <?php if ($isSecret): ?>
+            <input name="<?= e($key) ?>" type="password" autocomplete="off" value="" placeholder="<?= $set ? '•••••••• (saved — leave blank to keep)' : 'paste value' ?>">
+        <?php else: ?>
+            <input name="<?= e($key) ?>" value="<?= e((string)$val) ?>">
+        <?php endif; ?>
+        <p class="field-help"><?= e($help) ?></p>
+    <?php endforeach; ?>
 
-    <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Save settings</button>
         <a class="btn" href="/superadmin/settings.php?test=ebay">⚡ Test eBay connection</a>
     </div>
