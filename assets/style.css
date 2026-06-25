@@ -177,3 +177,7 @@ form.stack textarea { width: 100%; padding: 10px 12px; border-radius: 8px; borde
 .copy-field { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--accent); font-size: .85rem; }
 .field-help { color: var(--muted); font-size: .8rem; margin: 4px 0 6px; }
 hr { border: none; border-top: 1px solid var(--border); }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.tab { padding: 8px 14px; border-radius: 8px 8px 0 0; color: var(--muted); font-weight: 600; }
+.tab:hover { color: var(--text); text-decoration: none; background: var(--panel); }
+.tab-active { background: var(--panel); color: var(--accent); border: 1px solid var(--border); border-bottom: 2px solid var(--accent); }
