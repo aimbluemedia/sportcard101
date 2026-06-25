@@ -8,19 +8,23 @@ use SportCard101\Auth;
 
 Auth::requireAdmin();
 
-$campid   = (string) setting('ebay_campaign_id', '');
+$campid     = (string) setting('ebay_campaign_id', '');
 $configured = $campid !== '';
 
-$input  = trim((string) ($_GET['url'] ?? ''));
+// POST (not GET) so the pasted eBay URL never lands in the query string —
+// some shared-host firewalls (mod_security) return 403 for URLs-in-querystring.
+$input  = '';
 $result = null;
-if ($input !== '') {
-    // If it looks like a URL, wrap it; otherwise treat as a keyword search.
-    $result = preg_match('#^https?://#i', $input)
-        ? epn_link($input)
-        : epn_search_link($input);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+    $input = trim((string) ($_POST['url'] ?? ''));
+    if ($input !== '') {
+        $result = preg_match('#^https?://#i', $input)
+            ? epn_link($input)
+            : epn_search_link($input);
+    }
 }
 
-// Handy ready-made search links.
 $presets = ['Jordan PSA 10', 'Kobe Bryant PSA 10', 'Charizard PSA 10', 'Tom Brady PSA 10', 'Wembanyama Prizm'];
 
 layout_header('Affiliate Links', 'admin');
@@ -36,7 +40,8 @@ layout_header('Affiliate Links', 'admin');
 </div>
 <?php endif; ?>
 
-<form method="get" class="card" style="max-width:760px;margin-bottom:22px">
+<form method="post" class="card" style="max-width:760px;margin-bottom:22px">
+    <?= csrf_field() ?>
     <label>eBay URL or keywords</label>
     <input name="url" value="<?= e($input) ?>" placeholder="https://www.ebay.com/itm/123…  — or —  Jordan Fleer rookie PSA 10" autofocus>
     <p class="field-help">Paste an eBay item/search URL to wrap it, or type keywords to build a tracked search link.</p>
