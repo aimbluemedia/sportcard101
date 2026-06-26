@@ -150,3 +150,16 @@ CREATE TABLE IF NOT EXISTS listings (
     KEY idx_deal (search_id, is_deal),
     CONSTRAINT fk_listing_search FOREIGN KEY (search_id) REFERENCES searches (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Per-scan bid snapshots for auctions — lets us show how interest (bid count)
+-- grew over time and compute bid velocity.
+CREATE TABLE IF NOT EXISTS bid_snapshots (
+    id         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    listing_id BIGINT UNSIGNED NOT NULL,
+    bid_count  INT NOT NULL DEFAULT 0,
+    price      DECIMAL(10,2) NOT NULL DEFAULT 0,
+    snapped_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_listing_time (listing_id, snapped_at),
+    CONSTRAINT fk_snap_listing FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

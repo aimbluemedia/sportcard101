@@ -21,6 +21,7 @@ function nav_links(string $area): array
             ['/superadmin/pricing.php', 'Pricing'],
             ['/superadmin/content.php', 'Content'],
             ['/superadmin/searches.php', 'AI App'],
+            ['/superadmin/auctions.php', 'Auctions'],
             ['/superadmin/deals.php', 'Finder'],
             ['/superadmin/afflink.php', 'Links'],
             ['/superadmin/settings.php', 'Settings'],

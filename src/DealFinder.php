@@ -57,6 +57,11 @@ final class DealFinder
             $wasDealBefore = $this->existingDealFlag((int)$search['id'], $l['ebay_item_id']);
             $this->upsertListing((int)$search['id'], $l, $baseline, $discount, $isDeal);
 
+            // Record a bid snapshot for auctions so we can show interest over time.
+            if (($l['buying_option'] ?? '') === 'AUCTION' && $l['bid_count'] !== null) {
+                $this->recordBid((int)$search['id'], (string)$l['ebay_item_id'], (int)$l['bid_count'], (float)$l['price']);
+            }
+
             if ($isDeal) {
                 $row = $l;
                 $row['baseline_price'] = $baseline;
@@ -198,6 +203,18 @@ final class DealFinder
             ':sid'        => $searchId,
             ':item'       => $itemId,
         ]);
+    }
+
+    /** Append a bid-count snapshot for an auction listing (interest over time). */
+    private function recordBid(int $searchId, string $itemId, int $bidCount, float $price): void
+    {
+        $sql = 'INSERT INTO bid_snapshots (listing_id, bid_count, price)
+                SELECT id, ?, ? FROM listings WHERE search_id = ? AND ebay_item_id = ? LIMIT 1';
+        try {
+            $this->pdo->prepare($sql)->execute([$bidCount, $price, $searchId, $itemId]);
+        } catch (\Throwable $e) {
+            // bid_snapshots table may not exist yet on older installs — ignore.
+        }
     }
 
     private function markScanned(int $searchId): void
