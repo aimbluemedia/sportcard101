@@ -213,7 +213,6 @@ layout_header('Auctions', 'admin');
                             <span class="sporttag"><?= e($SPORTS[$a['sport_key']]['emoji'] . ' ' . $SPORTS[$a['sport_key']]['label']) ?></span>
                         <?php endif; ?>
                         <?php if ($verdict): ?>
-                            <span class="verdict verdict-<?= e(strtolower($verdict)) ?>"><?= e($verdict) ?></span>
                             <?php if ((int)$a['ai_confidence'] > 0): ?><span class="conf"><?= (int)$a['ai_confidence'] ?>% conf</span><?php endif; ?>
                             <?php if (!empty($a['ai_hidden_gem'])): ?><span class="gem">💎</span><?php endif; ?>
                         <?php endif; ?>
