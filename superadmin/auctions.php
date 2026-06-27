@@ -20,16 +20,17 @@ foreach ($SPORTS as $key => $meta) {
 }
 
 // ------------------------------------------------------------------- Filters
-$DEFAULTS = ['q' => '', 'sport' => 'all', 'grade' => 'all', 'sort' => 'ending'];
+$DEFAULTS = ['q' => '', 'sport' => 'all', 'grade' => 'all', 'sort' => 'ending', 'show' => 'value'];
 $q     = trim((string)($_GET['q'] ?? ''));
 $sport = isset($_GET['sport']) && isset($SPORTS[$_GET['sport']]) ? (string)$_GET['sport'] : 'all';
 $grade = in_array($_GET['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_GET['grade'] : 'all';
 $sorts = ['ending' => 'Ending soonest', 'bids' => 'Most bids', 'price' => 'Highest bid'];
 $sort  = isset($sorts[$_GET['sort'] ?? '']) ? (string)$_GET['sort'] : 'ending';
 
-// The "all sports" landing shows only AI-flagged value picks (BUY/WATCH).
-// Drilling into a sport browses every PSA auction for it, filterable by grade.
-$valueOnly = ($sport === 'all');
+// "Show" dropdown: value picks (auctions with an AI message) or all auctions.
+// The landing page defaults to value picks across all sports, any PSA grade.
+$show      = ($_GET['show'] ?? 'value') === 'all' ? 'all' : 'value';
+$valueOnly = ($show === 'value');
 
 // ------------------------------------------------------------------ Listings
 $where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL', 'l.end_time > UTC_TIMESTAMP()', "s.grade LIKE 'PSA %'"];
@@ -129,7 +130,7 @@ function board_url(array $over, array $cur, array $def): string
 {
     $vals = array_merge($cur, $over);
     $p = [];
-    foreach (['q', 'sport', 'grade', 'sort'] as $k) {
+    foreach (['q', 'sport', 'grade', 'sort', 'show'] as $k) {
         $v = (string)($vals[$k] ?? '');
         if ($v !== '' && $v !== ($def[$k] ?? '')) {
             $p[$k] = $v;
@@ -137,16 +138,11 @@ function board_url(array $over, array $cur, array $def): string
     }
     return '/superadmin/auctions.php' . ($p ? '?' . http_build_query($p) : '');
 }
-$cur = ['q' => $q, 'sport' => $sport, 'grade' => $grade, 'sort' => $sort];
+$cur = ['q' => $q, 'sport' => $sport, 'grade' => $grade, 'sort' => $sort, 'show' => $show];
 
 layout_header('Auctions', 'admin');
 ?>
 <h1>🔨 Graded Card Auctions</h1>
-<?php if ($valueOnly): ?>
-    <p class="sub">💎 PSA value picks across all sports — only auctions the AI rated under market. Tap a sport to browse all of its PSA auctions and filter by grade.</p>
-<?php else: ?>
-    <p class="sub">Browsing <strong><?= e($SPORTS[$sport]['emoji'] . ' ' . $SPORTS[$sport]['label']) ?></strong> PSA auctions. <a href="<?= e(board_url(['sport' => 'all', 'grade' => 'all'], $cur, $DEFAULTS)) ?>">← back to value picks</a></p>
-<?php endif; ?>
 
 <!-- Search bar -->
 <form method="get" action="/superadmin/auctions.php" class="searchbar">
@@ -156,6 +152,10 @@ layout_header('Auctions', 'admin');
         <?php foreach ($SPORTS as $key => $meta): ?>
             <option value="<?= e($key) ?>"<?= $sport === $key ? ' selected' : '' ?>><?= e($meta['emoji'] . ' ' . $meta['label']) ?></option>
         <?php endforeach; ?>
+    </select>
+    <select name="show" class="searchbar-select">
+        <option value="value"<?= $show === 'value' ? ' selected' : '' ?>>💎 With messages</option>
+        <option value="all"<?= $show === 'all' ? ' selected' : '' ?>>All auctions</option>
     </select>
     <select name="sort" class="searchbar-select">
         <?php foreach ($sorts as $val => $label): ?>
@@ -195,10 +195,10 @@ layout_header('Auctions', 'admin');
     <div class="empty">
         <?php if ($valueOnly): ?>
             No PSA value picks yet — the AI hasn't flagged any under-market auctions<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?>.<br>
-            Tap a sport and hit its <strong>⟳ Scan</strong> button to pull fresh auctions; flagged deals show up here.
+            Scan to pull fresh auctions, or switch <strong>“With messages” → “All auctions”</strong> in the bar to see everything captured.
         <?php else: ?>
-            No <?= e($SPORTS[$sport]['label']) ?> PSA auctions match<?= $q !== '' ? ' “' . e($q) . '”' : '' ?> yet.<br>
-            Use the <strong>⟳ Scan</strong> button above to pull them from eBay.
+            No PSA auctions captured<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?> yet.<br>
+            <?php if ($sport !== 'all'): ?>Use the <strong>⟳ Scan</strong> button above<?php else: ?>Tap a sport and hit its <strong>⟳ Scan</strong> button<?php endif; ?> to pull them from eBay.
         <?php endif; ?>
     </div>
 <?php else: ?>
