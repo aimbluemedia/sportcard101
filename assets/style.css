@@ -148,26 +148,21 @@ form.stack input, form.stack select {
 .scanpanel-field .btn { white-space: nowrap; }
 
 /* Search bar (VIPS Directory style) */
-.searchbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
-    padding: 14px 16px; margin: 6px 0 16px; }
-.searchbar-input { flex: 1 1 280px; min-width: 220px; padding: 12px 16px; border-radius: 10px;
-    border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: .95rem; }
+.searchbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
+    padding: 16px 20px; margin: 6px 0 18px; }
+.searchbar-input { flex: 1 1 300px; min-width: 220px; padding: 13px 18px; border-radius: 10px;
+    border: 1px solid var(--border); background: #0a0d12; color: var(--text); font-size: .95rem; }
 .searchbar-input::placeholder { color: var(--muted); }
-.searchbar-select { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
-    background: var(--bg); color: var(--text); font-size: .92rem; min-width: 150px; }
-.btn-search { padding: 12px 26px; border: none; border-radius: 999px; cursor: pointer;
+.searchbar-select { padding: 13px 16px; border-radius: 10px; border: 1px solid var(--border);
+    background: #0a0d12; color: var(--text); font-size: .92rem; min-width: 160px; cursor: pointer; }
+.btn-search { padding: 13px 30px; border: none; border-radius: 999px; cursor: pointer;
     font-weight: 800; font-size: .95rem; color: #2a1500;
-    background: linear-gradient(90deg, #ffb000, #ff6ea0); }
+    background: linear-gradient(90deg, #ffb000, #ff7a9c); box-shadow: 0 2px 14px rgba(255,140,80,.25); }
 .btn-search:hover { filter: brightness(1.06); }
-.btn-reset { border-radius: 999px; padding: 11px 22px; background: var(--panel-2); }
-
-/* Sport chips (pill row) */
-.sportchips { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }
-.sportchip { padding: 8px 18px; border-radius: 999px; border: 1px solid var(--accent);
-    background: rgba(255,176,0,.06); color: var(--accent); font-weight: 800; font-size: .9rem; }
-.sportchip:hover { background: rgba(255,176,0,.16); text-decoration: none; }
-.sportchip-on { background: var(--accent); color: #1a1200; }
+.btn-reset { border-radius: 10px; padding: 13px 24px; background: var(--panel-2);
+    border: 1px solid var(--border); color: var(--text); font-weight: 700; }
+.btn-reset:hover { border-color: var(--accent); text-decoration: none; }
 
 /* Per-sport grade filter + scan bar */
 .gradebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

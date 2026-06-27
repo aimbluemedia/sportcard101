@@ -166,14 +166,6 @@ layout_header('Auctions', 'admin');
     <a class="btn btn-reset" href="/superadmin/auctions.php">Reset</a>
 </form>
 
-<!-- Sport chips -->
-<div class="sportchips">
-    <a class="sportchip<?= $sport === 'all' ? ' sportchip-on' : '' ?>" href="<?= e(board_url(['sport' => 'all', 'grade' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
-    <?php foreach ($SPORTS as $key => $meta): ?>
-        <a class="sportchip<?= $sport === $key ? ' sportchip-on' : '' ?>" href="<?= e(board_url(['sport' => $key, 'grade' => 'all'], $cur, $DEFAULTS)) ?>"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></a>
-    <?php endforeach; ?>
-</div>
-
 <?php if ($sport !== 'all'): // Grade filter + scan, shown under the selected sport ?>
     <div class="gradebar">
         <span class="filterbar-label">PSA grade:</span>
