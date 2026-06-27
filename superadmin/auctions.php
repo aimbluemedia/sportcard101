@@ -34,22 +34,34 @@ $grade   = in_array($_GET['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_GET['gr
 // Filter defaults — a value is omitted from board URLs when it matches these.
 $DEFAULTS = ['when' => 'soon', 'sport' => 'all', 'company' => 'PSA', 'grade' => 'all'];
 
+// The "all sports" landing shows only AI-flagged value picks (BUY/WATCH, i.e.
+// the cards with an under-market message). Drilling into one sport switches to
+// browsing every auction for that sport, filterable by PSA grade.
+$valueOnly = ($sport === 'all');
+
 // ------------------------------------------------------------------ Listings
 $where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL'];
 $params = [];
 $where[] = $when === 'today' ? 'DATE(l.end_time) = UTC_DATE()' : 'l.end_time > UTC_TIMESTAMP()';
+
+if ($valueOnly) {
+    // Only listings the AI Opportunity Engine rated as value (have the message).
+    $where[] = "l.ai_verdict IN ('BUY','WATCH') AND l.ai_reason IS NOT NULL AND l.ai_reason <> ''";
+}
 if ($sport !== 'all') {
     $where[] = 's.keywords = ?';
     $params[] = $sport;
 }
-// Grade is stored as "COMPANY NUM" (e.g. "PSA 10"): company = prefix, grade = suffix.
-if ($company !== 'all' && $grade !== 'all') {
+// Grade is stored as "COMPANY NUM" (e.g. "PSA 10"): company = prefix, grade =
+// suffix. The grade filter only applies when drilled into a single sport.
+$applyGrade = ($sport !== 'all' && $grade !== 'all');
+if ($company !== 'all' && $applyGrade) {
     $where[] = 's.grade = ?';
     $params[] = $company . ' ' . $grade;
 } elseif ($company !== 'all') {
     $where[] = 's.grade LIKE ?';
     $params[] = $company . ' %';
-} elseif ($grade !== 'all') {
+} elseif ($applyGrade) {
     $where[] = 's.grade LIKE ?';
     $params[] = '% ' . $grade;
 }
@@ -147,7 +159,11 @@ $cur = ['when' => $when, 'sport' => $sport, 'company' => $company, 'grade' => $g
 layout_header('Auctions', 'admin');
 ?>
 <h1>🔨 Graded Card Auctions</h1>
-<p class="sub">Live auctions across baseball, football, basketball, hockey &amp; golf. Pick a grading company and grade, scan, and we record the bid count + current bid every scan so each card shows how high the bidding has climbed.</p>
+<?php if ($valueOnly): ?>
+    <p class="sub">💎 <strong>Value picks across all sports</strong> — only auctions the AI Opportunity Engine rated under market (e.g. <em>“About 71% below the going rate…”</em>). Click a sport below to browse <em>all</em> its auctions and filter by PSA grade.</p>
+<?php else: ?>
+    <p class="sub">Browsing <strong><?= e($SPORTS[$sport]['emoji'] . ' ' . $SPORTS[$sport]['label']) ?></strong> auctions — use the grade filter to narrow by PSA grade. <a href="<?= e(board_url(['sport' => 'all'], $cur, $DEFAULTS)) ?>">← back to value picks (all sports)</a></p>
+<?php endif; ?>
 
 <!-- Scan a specific company + grade (+ sport). Channels are created on demand. -->
 <form method="post" action="/superadmin/scan.php" class="scanpanel"><?= csrf_field() ?>
@@ -197,12 +213,16 @@ layout_header('Auctions', 'admin');
     <?php endforeach; ?>
 </div>
 <div class="filterbar">
-    <span class="filterbar-label">Grade:</span>
-    <a class="chip<?= $grade === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
-    <?php foreach ($GRADE_NUMS as $g): ?>
-        <a class="chip<?= $grade === $g ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => $g], $cur, $DEFAULTS)) ?>"><?= e($g) ?></a>
-    <?php endforeach; ?>
-    <span class="filterbar-label" style="margin-left:18px">When:</span>
+    <?php if ($sport !== 'all'): // PSA grade filter appears when drilled into a sport ?>
+        <span class="filterbar-label">Grade:</span>
+        <a class="chip<?= $grade === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
+        <?php foreach ($GRADE_NUMS as $g): ?>
+            <a class="chip<?= $grade === $g ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => $g], $cur, $DEFAULTS)) ?>"><?= e($g) ?></a>
+        <?php endforeach; ?>
+        <span class="filterbar-label" style="margin-left:18px">When:</span>
+    <?php else: ?>
+        <span class="filterbar-label">When:</span>
+    <?php endif; ?>
     <a class="chip<?= $when === 'today' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'today'], $cur, $DEFAULTS)) ?>">⏰ Closing today</a>
     <a class="chip<?= $when === 'soon' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">📅 All upcoming</a>
 </div>
@@ -217,10 +237,16 @@ layout_header('Auctions', 'admin');
 
 <?php if (!$auctions): ?>
     <div class="empty">
-        No auctions match this filter
-        <?= $when === 'today' ? '(ending today)' : '' ?> yet.<br>
-        Set the company, grade &amp; sport above and hit <strong>⟳ Scan this</strong> to pull them from eBay
-        <?php if ($when === 'today'): ?>— or check <a href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">all upcoming</a>.<?php endif; ?>
+        <?php if ($valueOnly): ?>
+            No value picks <?= $when === 'today' ? 'ending today ' : '' ?>yet — the AI hasn't flagged any under-market PSA auctions.<br>
+            Hit <strong>⟳ Scan this</strong> (or <strong>↻ Rescan all channels</strong>) to pull fresh auctions; flagged deals show up here.
+            <?php if ($when === 'today'): ?> You can also check <a href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">all upcoming</a>, or click a sport tab to browse every auction.<?php else: ?> Or click a sport tab to browse every auction regardless of value.<?php endif; ?>
+        <?php else: ?>
+            No <?= e($SPORTS[$sport]['label']) ?> auctions match this filter
+            <?= $when === 'today' ? '(ending today)' : '' ?> yet.<br>
+            Set the company, grade &amp; sport above and hit <strong>⟳ Scan this</strong> to pull them from eBay
+            <?php if ($when === 'today'): ?>— or check <a href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">all upcoming</a>.<?php endif; ?>
+        <?php endif; ?>
     </div>
 <?php else: ?>
     <div class="deals">
