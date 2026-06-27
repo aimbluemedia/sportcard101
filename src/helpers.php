@@ -160,6 +160,35 @@ function epn_search_link(string $keywords): string
     return epn_link($base);
 }
 
+/** Sports we organise auction channels by: key => [label, emoji]. */
+function card_sports(): array
+{
+    return [
+        'baseball'   => ['label' => 'Baseball',   'emoji' => '⚾'],
+        'football'   => ['label' => 'Football',   'emoji' => '🏈'],
+        'basketball' => ['label' => 'Basketball', 'emoji' => '🏀'],
+        'hockey'     => ['label' => 'Hockey',     'emoji' => '🏒'],
+        'golf'       => ['label' => 'Golf',       'emoji' => '⛳'],
+    ];
+}
+
+/** Grading companies: code (used in the eBay query) => display label. */
+function card_companies(): array
+{
+    return [
+        'PSA' => 'PSA',
+        'BGS' => 'Beckett (BGS)',
+        'SGC' => 'SGC',
+        'CGC' => 'CGC',
+    ];
+}
+
+/** Grade numbers we let users pick. Half grades apply to BGS/SGC/CGC. */
+function card_grade_nums(): array
+{
+    return ['10', '9.5', '9', '8.5', '8', '7'];
+}
+
 /** Human-friendly "time left" for an auction end time (UTC string). */
 function time_left(?string $endTimeUtc): string
 {

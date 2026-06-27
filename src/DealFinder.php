@@ -104,6 +104,28 @@ final class DealFinder
     }
 
     /**
+     * Ensure an auction "channel" (saved search) exists for a sport + grade,
+     * creating it if missing. The grade is the full "COMPANY NUM" string, e.g.
+     * "PSA 10" or "BGS 9.5". Idempotent. Returns the search id.
+     */
+    public static function ensureChannel(\PDO $pdo, int $userId, string $sportKeyword, string $label, string $grade): int
+    {
+        $sel = $pdo->prepare(
+            'SELECT id FROM searches WHERE user_id = ? AND keywords = ? AND grade = ? AND buying_option = ? LIMIT 1'
+        );
+        $sel->execute([$userId, $sportKeyword, $grade, 'AUCTION']);
+        $id = $sel->fetchColumn();
+        if ($id !== false) {
+            return (int)$id;
+        }
+        $pdo->prepare(
+            'INSERT INTO searches (user_id, label, keywords, grade, buying_option, threshold_pct, active)
+             VALUES (?, ?, ?, ?, ?, ?, 1)'
+        )->execute([$userId, $label, $sportKeyword, $grade, 'AUCTION', 25]);
+        return (int)$pdo->lastInsertId();
+    }
+
+    /**
      * Scan active searches for a user, optionally narrowed to one sport
      * (matched on the search keywords) and/or one grade. Returns all new deals.
      */

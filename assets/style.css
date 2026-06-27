@@ -138,6 +138,15 @@ form.stack input, form.stack select {
 .gradetag { background: var(--panel-2); color: var(--accent); border: 1px solid var(--accent); font-weight: 700; font-size: .68rem; padding: 1px 7px; border-radius: 5px; }
 .sporttag { color: var(--muted); font-size: .72rem; font-weight: 600; }
 
+/* Auction scan panel (company / grade / sport selectors) */
+.scanpanel { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 10px; }
+.scanpanel-field { display: flex; flex-direction: column; gap: 5px; }
+.scanpanel-field label { font-size: .78rem; color: var(--muted); font-weight: 600; }
+.scanpanel-field select { padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: .92rem; min-width: 140px; }
+.scanpanel-field .btn { white-space: nowrap; }
+
 /* ===== Multi-area additions (homepage, member, admin) ===== */
 .btn-lg { padding: 12px 22px; font-size: 1.05rem; }
 .btn-sm { padding: 4px 10px; font-size: .82rem; }

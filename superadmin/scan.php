@@ -13,7 +13,7 @@ use SportCard101\Notifier;
 Auth::requireAdmin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect('/superadmin/searches.php');
+    redirect('/superadmin/auctions.php');
 }
 csrf_verify();
 
@@ -21,25 +21,55 @@ $ebay   = new EbayClient(ebay_config($config['ebay']));
 $ai     = new AiAnalyst($config['ai']);
 $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 $notifier = new Notifier($pdo, $config['mail']);
+$uid = Auth::userId();
 
-// Optional scope: scan one sport (matched on search keywords) and/or one grade.
-$sport = trim((string)($_POST['sport'] ?? ''));
-$grade = trim((string)($_POST['grade'] ?? ''));
-$when  = ($_POST['when'] ?? 'today') === 'soon' ? 'soon' : 'today';
+$sports    = card_sports();
+$companies = card_companies();
+$gradeNums = card_grade_nums();
+
+// What to scan: a specific company + grade (+ optional sport), or just a
+// refresh of everything already on the board.
+$company  = isset($_POST['company']) && isset($companies[$_POST['company']]) ? (string)$_POST['company'] : '';
+$gradeNum = in_array($_POST['grade'] ?? '', $gradeNums, true) ? (string)$_POST['grade'] : '';
+$sport    = isset($_POST['sport']) && isset($sports[$_POST['sport']]) ? (string)$_POST['sport'] : 'all';
+$when     = ($_POST['when'] ?? 'today') === 'soon' ? 'soon' : 'today';
+
+// Build the full grade string ("PSA 10") when both company + grade chosen.
+$grade = ($company !== '' && $gradeNum !== '') ? $company . ' ' . $gradeNum : '';
 
 try {
-    $newDeals = $finder->scanSelected(Auth::userId(), $sport ?: null, $grade ?: null);
+    if ($grade !== '') {
+        // Ensure the channel(s) exist for this company+grade, then scan them.
+        $targets = $sport === 'all' ? array_keys($sports) : [$sport];
+        foreach ($targets as $sk) {
+            $label = $sports[$sk]['emoji'] . ' ' . $sports[$sk]['label'] . ' — ' . $grade;
+            DealFinder::ensureChannel($pdo, $uid, $sk, $label, $grade);
+        }
+        $newDeals = $finder->scanSelected($uid, $sport === 'all' ? null : $sport, $grade);
+        $scope = ($sport === 'all' ? 'all sports' : $sports[$sport]['label']) . ' · ' . $grade;
+    } else {
+        // No specific combo — refresh every channel already on the board.
+        $newDeals = $finder->scanSelected($uid, null, null);
+        $scope = 'all channels';
+    }
+
     $notifier->notify($newDeals);
     $n = count($newDeals);
-    flash($n ? 'success' : 'info', $n ? "Scan complete — {$n} new deal" . ($n === 1 ? '' : 's') . " flagged!" : 'Scan complete — auctions captured, no new under-market deals flagged.');
+    flash(
+        $n ? 'success' : 'info',
+        $n
+            ? "Scanned {$scope} — {$n} new deal" . ($n === 1 ? '' : 's') . " flagged!"
+            : "Scanned {$scope} — auctions captured, no new under-market deals flagged."
+    );
 } catch (\Throwable $e) {
     flash('error', 'Scan failed: ' . $e->getMessage());
 }
 
 // Return to the board, preserving the active filters.
 $back = http_build_query(array_filter([
-    'when'  => $when,
-    'sport' => $sport,
-    'grade' => $grade,
+    'when'    => $when,
+    'sport'   => $sport === 'all' ? '' : $sport,
+    'company' => $company,
+    'grade'   => $gradeNum,
 ]));
 redirect('/superadmin/auctions.php' . ($back ? '?' . $back : ''));

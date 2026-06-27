@@ -5,66 +5,48 @@ require __DIR__ . '/../src/bootstrap.php';
 require __DIR__ . '/../src/layout.php';
 
 use SportCard101\Auth;
+use SportCard101\DealFinder;
 
 Auth::requireAdmin();
 
-// ------------------------------------------------------------------ Channels
-// The board is organised into sport × grade "channels". Each is just a saved
-// AUCTION search whose keywords = the sport key, so we can scan and filter per
-// sport without any extra schema.
-$SPORTS = [
-    'baseball'   => ['label' => 'Baseball',   'emoji' => '⚾'],
-    'football'   => ['label' => 'Football',   'emoji' => '🏈'],
-    'basketball' => ['label' => 'Basketball', 'emoji' => '🏀'],
-    'hockey'     => ['label' => 'Hockey',     'emoji' => '🏒'],
-    'golf'       => ['label' => 'Golf',       'emoji' => '⛳'],
-];
-$GRADES = ['PSA 10', 'BGS 10'];
-
-// Auto-create any missing channels for this admin (idempotent, runs each load).
+$SPORTS    = card_sports();
+$COMPANIES = card_companies();
+$GRADE_NUMS = card_grade_nums();
 $uid = Auth::userId();
-$existing = [];
-$stmt = $pdo->prepare('SELECT keywords, grade FROM searches WHERE user_id = ? AND buying_option = ?');
-$stmt->execute([$uid, 'AUCTION']);
-foreach ($stmt->fetchAll() as $r) {
-    $existing[$r['keywords'] . '|' . $r['grade']] = true;
-}
-$insert = $pdo->prepare(
-    'INSERT INTO searches (user_id, label, keywords, grade, buying_option, threshold_pct, active)
-     VALUES (?, ?, ?, ?, ?, ?, 1)'
-);
+
+// Seed the headline channels (PSA 10 & BGS 10 across every sport) so the board
+// is never empty on a fresh install. Other company/grade combos are created on
+// demand when scanned. Idempotent.
 foreach ($SPORTS as $key => $meta) {
-    foreach ($GRADES as $g) {
-        if (isset($existing[$key . '|' . $g])) {
-            continue;
-        }
-        $label = $meta['emoji'] . ' ' . $meta['label'] . ' — ' . $g;
-        $insert->execute([$uid, $label, $key, $g, 'AUCTION', 25]);
+    foreach (['PSA 10', 'BGS 10'] as $g) {
+        DealFinder::ensureChannel($pdo, $uid, $key, $meta['emoji'] . ' ' . $meta['label'] . ' — ' . $g, $g);
     }
 }
 
 // ------------------------------------------------------------------- Filters
-$when  = ($_GET['when'] ?? 'today') === 'soon' ? 'soon' : 'today';
-$sport = isset($_GET['sport']) && isset($SPORTS[$_GET['sport']]) ? (string)$_GET['sport'] : 'all';
-$grade = in_array($_GET['grade'] ?? '', $GRADES, true) ? (string)$_GET['grade'] : 'all';
+$when    = ($_GET['when'] ?? 'today') === 'soon' ? 'soon' : 'today';
+$sport   = isset($_GET['sport']) && isset($SPORTS[$_GET['sport']]) ? (string)$_GET['sport'] : 'all';
+$company = isset($_GET['company']) && isset($COMPANIES[$_GET['company']]) ? (string)$_GET['company'] : 'all';
+$grade   = in_array($_GET['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_GET['grade'] : 'all';
 
 // ------------------------------------------------------------------ Listings
 $where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL'];
 $params = [];
-if ($when === 'today') {
-    // Everything ending today (UTC), incl. ones already closed today so their
-    // final recorded bid shows — closest to sold data without Insights.
-    $where[] = 'DATE(l.end_time) = UTC_DATE()';
-} else {
-    $where[] = 'l.end_time > UTC_TIMESTAMP()';
-}
+$where[] = $when === 'today' ? 'DATE(l.end_time) = UTC_DATE()' : 'l.end_time > UTC_TIMESTAMP()';
 if ($sport !== 'all') {
     $where[] = 's.keywords = ?';
     $params[] = $sport;
 }
-if ($grade !== 'all') {
+// Grade is stored as "COMPANY NUM" (e.g. "PSA 10"): company = prefix, grade = suffix.
+if ($company !== 'all' && $grade !== 'all') {
     $where[] = 's.grade = ?';
-    $params[] = $grade;
+    $params[] = $company . ' ' . $grade;
+} elseif ($company !== 'all') {
+    $where[] = 's.grade LIKE ?';
+    $params[] = $company . ' %';
+} elseif ($grade !== 'all') {
+    $where[] = 's.grade LIKE ?';
+    $params[] = '% ' . $grade;
 }
 
 $sql = 'SELECT l.*, s.label AS search_label, s.keywords AS sport_key, s.grade AS search_grade
@@ -135,68 +117,95 @@ function trail_points(array $snaps, int $max = 6): array
 }
 
 /** Build a board URL preserving the current filters with overrides. */
-function board_url(array $over, string $when, string $sport, string $grade): string
+function board_url(array $over, array $cur): string
 {
     $p = array_filter([
-        'when'  => $over['when']  ?? $when,
-        'sport' => $over['sport'] ?? $sport,
-        'grade' => $over['grade'] ?? $grade,
+        'when'    => $over['when']    ?? $cur['when'],
+        'sport'   => $over['sport']   ?? $cur['sport'],
+        'company' => $over['company'] ?? $cur['company'],
+        'grade'   => $over['grade']   ?? $cur['grade'],
     ], fn ($v) => $v !== '' && $v !== 'all');
     return '/superadmin/auctions.php' . ($p ? '?' . http_build_query($p) : '');
 }
-
-$sportLabel = $sport === 'all' ? 'all sports' : ($SPORTS[$sport]['emoji'] . ' ' . $SPORTS[$sport]['label']);
+$cur = ['when' => $when, 'sport' => $sport, 'company' => $company, 'grade' => $grade];
 
 layout_header('Auctions', 'admin');
 ?>
-<h1>🔨 PSA 10 &amp; BGS 10 Auctions</h1>
-<p class="sub">Live auctions across baseball, football, basketball, hockey &amp; golf. We record the bid count and current bid <em>every scan</em>, so each card shows how high the bidding has climbed. eBay anonymizes bidders, so the price trail + bid count is the interest signal.</p>
+<h1>🔨 Graded Card Auctions</h1>
+<p class="sub">Live auctions across baseball, football, basketball, hockey &amp; golf. Pick a grading company and grade, scan, and we record the bid count + current bid every scan so each card shows how high the bidding has climbed.</p>
 
-<!-- Per-sport scan buttons -->
-<div class="scanbar">
-    <span class="scanbar-label">⟳ Scan now:</span>
-    <form method="post" action="/superadmin/scan.php" class="inline"><?= csrf_field() ?>
-        <input type="hidden" name="when" value="<?= e($when) ?>">
-        <input type="hidden" name="grade" value="<?= e($grade === 'all' ? '' : $grade) ?>">
-        <button class="btn btn-scan" type="submit">All sports</button>
-    </form>
-    <?php foreach ($SPORTS as $key => $meta): ?>
-        <form method="post" action="/superadmin/scan.php" class="inline"><?= csrf_field() ?>
-            <input type="hidden" name="when" value="<?= e($when) ?>">
-            <input type="hidden" name="sport" value="<?= e($key) ?>">
-            <input type="hidden" name="grade" value="<?= e($grade === 'all' ? '' : $grade) ?>">
-            <button class="btn" type="submit"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></button>
-        </form>
+<!-- Scan a specific company + grade (+ sport). Channels are created on demand. -->
+<form method="post" action="/superadmin/scan.php" class="scanpanel"><?= csrf_field() ?>
+    <input type="hidden" name="when" value="<?= e($when) ?>">
+    <div class="scanpanel-field">
+        <label>Grading company</label>
+        <select name="company">
+            <?php foreach ($COMPANIES as $code => $label): ?>
+                <option value="<?= e($code) ?>"<?= ($company !== 'all' ? $company : 'PSA') === $code ? ' selected' : '' ?>><?= e($label) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <div class="scanpanel-field">
+        <label>Grade</label>
+        <select name="grade">
+            <?php foreach ($GRADE_NUMS as $g): ?>
+                <option value="<?= e($g) ?>"<?= ($grade !== 'all' ? $grade : '10') === $g ? ' selected' : '' ?>><?= e($g) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <div class="scanpanel-field">
+        <label>Sport</label>
+        <select name="sport">
+            <option value="all"<?= $sport === 'all' ? ' selected' : '' ?>>All sports</option>
+            <?php foreach ($SPORTS as $key => $meta): ?>
+                <option value="<?= e($key) ?>"<?= $sport === $key ? ' selected' : '' ?>><?= e($meta['emoji'] . ' ' . $meta['label']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <div class="scanpanel-field">
+        <label>&nbsp;</label>
+        <button class="btn btn-scan" type="submit">⟳ Scan this</button>
+    </div>
+</form>
+<form method="post" action="/superadmin/scan.php" class="inline" style="margin:-6px 0 0"><?= csrf_field() ?>
+    <input type="hidden" name="when" value="<?= e($when) ?>">
+    <button class="btn" type="submit">↻ Rescan all channels</button>
+</form>
+<p class="sub" style="margin:2px 0 18px">PSA grades are whole numbers; BGS / SGC / CGC also use half grades (9.5). “Rescan all channels” refreshes everything already on the board.</p>
+
+<!-- Filters -->
+<div class="filterbar">
+    <span class="filterbar-label">Company:</span>
+    <a class="chip<?= $company === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => 'all'], $cur)) ?>">All</a>
+    <?php foreach ($COMPANIES as $code => $label): ?>
+        <a class="chip<?= $company === $code ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => $code], $cur)) ?>"><?= e($label) ?></a>
     <?php endforeach; ?>
 </div>
-<p class="sub" style="margin:6px 0 18px">Each scan records a bid snapshot for every auction it finds. Run periodically (or via cron) to build a finer price trail. Scanning respects the grade filter below.</p>
-
-<!-- Grade filter -->
 <div class="filterbar">
     <span class="filterbar-label">Grade:</span>
-    <a class="chip<?= $grade === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'all'], $when, $sport, $grade)) ?>">Both</a>
-    <a class="chip<?= $grade === 'PSA 10' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'PSA 10'], $when, $sport, $grade)) ?>">PSA 10</a>
-    <a class="chip<?= $grade === 'BGS 10' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'BGS 10'], $when, $sport, $grade)) ?>">BGS 10</a>
+    <a class="chip<?= $grade === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'all'], $cur)) ?>">All</a>
+    <?php foreach ($GRADE_NUMS as $g): ?>
+        <a class="chip<?= $grade === $g ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => $g], $cur)) ?>"><?= e($g) ?></a>
+    <?php endforeach; ?>
     <span class="filterbar-label" style="margin-left:18px">When:</span>
-    <a class="chip<?= $when === 'today' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'today'], $when, $sport, $grade)) ?>">⏰ Closing today</a>
-    <a class="chip<?= $when === 'soon' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'soon'], $when, $sport, $grade)) ?>">📅 All upcoming</a>
+    <a class="chip<?= $when === 'today' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'today'], $cur)) ?>">⏰ Closing today</a>
+    <a class="chip<?= $when === 'soon' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'soon'], $cur)) ?>">📅 All upcoming</a>
 </div>
 
 <!-- Sport tabs -->
 <div class="tabs" style="margin-bottom:18px">
-    <a class="tab<?= $sport === 'all' ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => 'all'], $when, $sport, $grade)) ?>">All sports</a>
+    <a class="tab<?= $sport === 'all' ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => 'all'], $cur)) ?>">All sports</a>
     <?php foreach ($SPORTS as $key => $meta): ?>
-        <a class="tab<?= $sport === $key ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => $key], $when, $sport, $grade)) ?>"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></a>
+        <a class="tab<?= $sport === $key ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => $key], $cur)) ?>"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></a>
     <?php endforeach; ?>
 </div>
 
 <?php if (!$auctions): ?>
     <div class="empty">
-        No <?= e($sportLabel) ?> auctions
-        <?= $grade === 'all' ? '' : '(' . e($grade) . ') ' ?>
-        <?= $when === 'today' ? 'ending today' : 'upcoming' ?> captured yet.<br>
-        Hit a <strong>Scan now</strong> button above to pull them from eBay
-        <?php if ($when === 'today'): ?>— or check <a href="<?= e(board_url(['when' => 'soon'], $when, $sport, $grade)) ?>">all upcoming</a>.<?php endif; ?>
+        No auctions match this filter
+        <?= $when === 'today' ? '(ending today)' : '' ?> yet.<br>
+        Set the company, grade &amp; sport above and hit <strong>⟳ Scan this</strong> to pull them from eBay
+        <?php if ($when === 'today'): ?>— or check <a href="<?= e(board_url(['when' => 'soon'], $cur)) ?>">all upcoming</a>.<?php endif; ?>
     </div>
 <?php else: ?>
     <div class="deals">
