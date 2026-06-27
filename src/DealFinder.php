@@ -100,8 +100,28 @@ final class DealFinder
     /** Scan every active search for a user. Returns all new deals. */
     public function scanAll(int $userId): array
     {
-        $stmt = $this->pdo->prepare('SELECT * FROM searches WHERE user_id = ? AND active = 1');
-        $stmt->execute([$userId]);
+        return $this->scanSelected($userId, null, null);
+    }
+
+    /**
+     * Scan active searches for a user, optionally narrowed to one sport
+     * (matched on the search keywords) and/or one grade. Returns all new deals.
+     */
+    public function scanSelected(int $userId, ?string $sportKeyword, ?string $grade): array
+    {
+        $sql    = 'SELECT * FROM searches WHERE user_id = ? AND active = 1';
+        $params = [$userId];
+        if ($sportKeyword !== null && $sportKeyword !== '') {
+            $sql .= ' AND keywords = ?';
+            $params[] = $sportKeyword;
+        }
+        if ($grade !== null && $grade !== '') {
+            $sql .= ' AND grade = ?';
+            $params[] = $grade;
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
         $all = [];
         foreach ($stmt->fetchAll() as $search) {
             foreach ($this->scanSearch($search) as $deal) {

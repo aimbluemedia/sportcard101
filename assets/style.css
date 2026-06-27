@@ -127,6 +127,17 @@ form.stack input, form.stack select {
 .bidtrail-points .pt sup { color: var(--accent); font-size: .62rem; font-weight: 700; margin-left: 1px; }
 .bidtrail-points .arrow { color: var(--muted); }
 
+/* Auction scan bar + filters */
+.scanbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scanbar-label { color: var(--muted); font-weight: 700; font-size: .9rem; }
+.filterbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 14px; }
+.filterbar-label { color: var(--muted); font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
+.chip { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-weight: 600; font-size: .85rem; }
+.chip:hover { color: var(--text); text-decoration: none; border-color: var(--accent); }
+.chip-on { background: var(--accent); color: #1a1200; border-color: var(--accent); }
+.gradetag { background: var(--panel-2); color: var(--accent); border: 1px solid var(--accent); font-weight: 700; font-size: .68rem; padding: 1px 7px; border-radius: 5px; }
+.sporttag { color: var(--muted); font-size: .72rem; font-weight: 600; }
+
 /* ===== Multi-area additions (homepage, member, admin) ===== */
 .btn-lg { padding: 12px 22px; font-size: 1.05rem; }
 .btn-sm { padding: 4px 10px; font-size: .82rem; }

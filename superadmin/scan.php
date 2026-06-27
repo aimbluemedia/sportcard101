@@ -22,13 +22,24 @@ $ai     = new AiAnalyst($config['ai']);
 $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 $notifier = new Notifier($pdo, $config['mail']);
 
+// Optional scope: scan one sport (matched on search keywords) and/or one grade.
+$sport = trim((string)($_POST['sport'] ?? ''));
+$grade = trim((string)($_POST['grade'] ?? ''));
+$when  = ($_POST['when'] ?? 'today') === 'soon' ? 'soon' : 'today';
+
 try {
-    $newDeals = $finder->scanAll(Auth::userId());
+    $newDeals = $finder->scanSelected(Auth::userId(), $sport ?: null, $grade ?: null);
     $notifier->notify($newDeals);
     $n = count($newDeals);
-    flash($n ? 'success' : 'info', $n ? "Scan complete — {$n} new deal" . ($n === 1 ? '' : 's') . " found!" : 'Scan complete — no new deals this time.');
+    flash($n ? 'success' : 'info', $n ? "Scan complete — {$n} new deal" . ($n === 1 ? '' : 's') . " flagged!" : 'Scan complete — auctions captured, no new under-market deals flagged.');
 } catch (\Throwable $e) {
     flash('error', 'Scan failed: ' . $e->getMessage());
 }
 
-redirect('/superadmin/auctions.php');
+// Return to the board, preserving the active filters.
+$back = http_build_query(array_filter([
+    'when'  => $when,
+    'sport' => $sport,
+    'grade' => $grade,
+]));
+redirect('/superadmin/auctions.php' . ($back ? '?' . $back : ''));
