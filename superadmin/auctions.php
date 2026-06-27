@@ -24,10 +24,15 @@ foreach ($SPORTS as $key => $meta) {
 }
 
 // ------------------------------------------------------------------- Filters
-$when    = ($_GET['when'] ?? 'today') === 'soon' ? 'soon' : 'today';
+// Defaults: the main page lands on PSA, every sport, all upcoming, all grades.
+$when    = ($_GET['when'] ?? 'soon') === 'today' ? 'today' : 'soon';
 $sport   = isset($_GET['sport']) && isset($SPORTS[$_GET['sport']]) ? (string)$_GET['sport'] : 'all';
-$company = isset($_GET['company']) && isset($COMPANIES[$_GET['company']]) ? (string)$_GET['company'] : 'all';
+$company = ($_GET['company'] ?? 'PSA');
+$company = ($company === 'all' || isset($COMPANIES[$company])) ? (string)$company : 'PSA';
 $grade   = in_array($_GET['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_GET['grade'] : 'all';
+
+// Filter defaults — a value is omitted from board URLs when it matches these.
+$DEFAULTS = ['when' => 'soon', 'sport' => 'all', 'company' => 'PSA', 'grade' => 'all'];
 
 // ------------------------------------------------------------------ Listings
 $where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL'];
@@ -116,15 +121,25 @@ function trail_points(array $snaps, int $max = 6): array
     return $out;
 }
 
-/** Build a board URL preserving the current filters with overrides. */
-function board_url(array $over, array $cur): string
+/**
+ * Build a board URL preserving the current filters with overrides. A value is
+ * dropped from the query only when it equals its default, so e.g. choosing
+ * "All" companies still emits company=all to override the PSA default.
+ */
+function board_url(array $over, array $cur, array $def): string
 {
-    $p = array_filter([
+    $vals = [
         'when'    => $over['when']    ?? $cur['when'],
         'sport'   => $over['sport']   ?? $cur['sport'],
         'company' => $over['company'] ?? $cur['company'],
         'grade'   => $over['grade']   ?? $cur['grade'],
-    ], fn ($v) => $v !== '' && $v !== 'all');
+    ];
+    $p = [];
+    foreach ($vals as $k => $v) {
+        if ($v !== '' && $v !== $def[$k]) {
+            $p[$k] = $v;
+        }
+    }
     return '/superadmin/auctions.php' . ($p ? '?' . http_build_query($p) : '');
 }
 $cur = ['when' => $when, 'sport' => $sport, 'company' => $company, 'grade' => $grade];
@@ -176,27 +191,27 @@ layout_header('Auctions', 'admin');
 <!-- Filters -->
 <div class="filterbar">
     <span class="filterbar-label">Company:</span>
-    <a class="chip<?= $company === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => 'all'], $cur)) ?>">All</a>
+    <a class="chip<?= $company === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
     <?php foreach ($COMPANIES as $code => $label): ?>
-        <a class="chip<?= $company === $code ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => $code], $cur)) ?>"><?= e($label) ?></a>
+        <a class="chip<?= $company === $code ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => $code], $cur, $DEFAULTS)) ?>"><?= e($label) ?></a>
     <?php endforeach; ?>
 </div>
 <div class="filterbar">
     <span class="filterbar-label">Grade:</span>
-    <a class="chip<?= $grade === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'all'], $cur)) ?>">All</a>
+    <a class="chip<?= $grade === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
     <?php foreach ($GRADE_NUMS as $g): ?>
-        <a class="chip<?= $grade === $g ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => $g], $cur)) ?>"><?= e($g) ?></a>
+        <a class="chip<?= $grade === $g ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => $g], $cur, $DEFAULTS)) ?>"><?= e($g) ?></a>
     <?php endforeach; ?>
     <span class="filterbar-label" style="margin-left:18px">When:</span>
-    <a class="chip<?= $when === 'today' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'today'], $cur)) ?>">⏰ Closing today</a>
-    <a class="chip<?= $when === 'soon' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'soon'], $cur)) ?>">📅 All upcoming</a>
+    <a class="chip<?= $when === 'today' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'today'], $cur, $DEFAULTS)) ?>">⏰ Closing today</a>
+    <a class="chip<?= $when === 'soon' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">📅 All upcoming</a>
 </div>
 
 <!-- Sport tabs -->
 <div class="tabs" style="margin-bottom:18px">
-    <a class="tab<?= $sport === 'all' ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => 'all'], $cur)) ?>">All sports</a>
+    <a class="tab<?= $sport === 'all' ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => 'all'], $cur, $DEFAULTS)) ?>">All sports</a>
     <?php foreach ($SPORTS as $key => $meta): ?>
-        <a class="tab<?= $sport === $key ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => $key], $cur)) ?>"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></a>
+        <a class="tab<?= $sport === $key ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => $key], $cur, $DEFAULTS)) ?>"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></a>
     <?php endforeach; ?>
 </div>
 
@@ -205,7 +220,7 @@ layout_header('Auctions', 'admin');
         No auctions match this filter
         <?= $when === 'today' ? '(ending today)' : '' ?> yet.<br>
         Set the company, grade &amp; sport above and hit <strong>⟳ Scan this</strong> to pull them from eBay
-        <?php if ($when === 'today'): ?>— or check <a href="<?= e(board_url(['when' => 'soon'], $cur)) ?>">all upcoming</a>.<?php endif; ?>
+        <?php if ($when === 'today'): ?>— or check <a href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">all upcoming</a>.<?php endif; ?>
     </div>
 <?php else: ?>
     <div class="deals">

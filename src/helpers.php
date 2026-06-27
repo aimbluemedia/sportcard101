@@ -165,8 +165,8 @@ function card_sports(): array
 {
     return [
         'baseball'   => ['label' => 'Baseball',   'emoji' => '⚾'],
-        'football'   => ['label' => 'Football',   'emoji' => '🏈'],
         'basketball' => ['label' => 'Basketball', 'emoji' => '🏀'],
+        'football'   => ['label' => 'Football',   'emoji' => '🏈'],
         'hockey'     => ['label' => 'Hockey',     'emoji' => '🏒'],
         'golf'       => ['label' => 'Golf',       'emoji' => '⛳'],
     ];
