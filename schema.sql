@@ -163,3 +163,28 @@ CREATE TABLE IF NOT EXISTS bid_snapshots (
     KEY idx_listing_time (listing_id, snapped_at),
     CONSTRAINT fk_snap_listing FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Sold comps — the final result of each tracked auction once it closed (the
+-- last bid we recorded ≈ the sale price). Our own "what it sold for" database,
+-- built over time by the closing tracker, used to price buys/sells.
+CREATE TABLE IF NOT EXISTS sold_comps (
+    id             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    ebay_item_id   VARCHAR(64)  NOT NULL,
+    search_id      INT UNSIGNED DEFAULT NULL,
+    sport          VARCHAR(32)  DEFAULT NULL,
+    grade          VARCHAR(32)  DEFAULT NULL,
+    canonical_card VARCHAR(255) DEFAULT NULL,
+    card_key       VARCHAR(255) DEFAULT NULL,
+    title          VARCHAR(512) DEFAULT NULL,
+    final_price    DECIMAL(10,2) NOT NULL,
+    final_bids     INT NOT NULL DEFAULT 0,
+    currency       VARCHAR(8)   NOT NULL DEFAULT 'USD',
+    image_url      VARCHAR(1024) DEFAULT NULL,
+    item_url       VARCHAR(1024) DEFAULT NULL,
+    closed_at      DATETIME     NOT NULL,
+    recorded_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_item (ebay_item_id),
+    KEY idx_card (sport, grade, card_key),
+    KEY idx_closed (closed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

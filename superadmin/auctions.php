@@ -6,6 +6,7 @@ require __DIR__ . '/../src/layout.php';
 
 use SportCard101\Auth;
 use SportCard101\DealFinder;
+use SportCard101\Comps;
 
 Auth::requireAdmin();
 
@@ -88,6 +89,22 @@ if ($auctions) {
         }
     } catch (\Throwable $e) {
         // bid_snapshots table not created yet — board still works without trail.
+    }
+}
+
+// Look up our sold-comp stats for each auction's card so we can show the going
+// rate and flag snipe opportunities (well under comp + ending soon).
+$compStats = [];
+if ($auctions) {
+    $cards = array_map(fn ($a) => [
+        'sport' => $a['sport_key'],
+        'grade' => $a['search_grade'],
+        'key'   => Comps::cardKey((string)$a['title']),
+    ], $auctions);
+    try {
+        $compStats = Comps::statsForCards($pdo, $cards);
+    } catch (\Throwable $e) {
+        // sold_comps not migrated yet — board still works without comps.
     }
 }
 
@@ -200,11 +217,21 @@ layout_header('Auctions', 'admin');
             $st      = bid_stats($snaps);
             $verdict = $a['ai_verdict'] ?? null;
             $ended   = strtotime($a['end_time']) <= time();
+
+            // Sold-comp comparison for this card.
+            $ck   = Comps::cardKey((string)$a['title']);
+            $comp = $compStats[$a['sport_key'] . '|' . $a['search_grade'] . '|' . $ck] ?? null;
+            $underPct = ($comp && $comp['median'] > 0)
+                ? round((($comp['median'] - (float)$a['price']) / $comp['median']) * 100)
+                : null;
+            $hoursLeft = (strtotime($a['end_time']) - time()) / 3600;
+            $snipe = !$ended && $comp && $underPct !== null && $underPct >= 20 && $hoursLeft <= 8;
         ?>
-            <div class="deal is-deal<?= $verdict ? ' v-' . strtolower($verdict) : '' ?><?= $ended ? ' ended' : '' ?>">
+            <div class="deal is-deal<?= $verdict ? ' v-' . strtolower($verdict) : '' ?><?= $ended ? ' ended' : '' ?><?= $snipe ? ' is-snipe' : '' ?>">
                 <span class="badge<?= $ended ? ' badge-ended' : '' ?>">
                     <?= $ended ? '🏁 ended' : '⏳ ' . e(time_left($a['end_time'])) ?>
                 </span>
+                <?php if ($snipe): ?><span class="snipe-badge">🎯 SNIPE · <?= (int)$underPct ?>% under comp</span><?php endif; ?>
                 <?php if ($a['image_url']): ?><img src="<?= e($a['image_url']) ?>" alt="" loading="lazy"><?php endif; ?>
                 <div class="info">
                     <div class="ai-row">
@@ -233,6 +260,18 @@ layout_header('Auctions', 'admin');
                             <span class="sub">tracking…</span>
                         <?php endif; ?>
                     </div>
+
+                    <?php if ($comp): ?>
+                        <div class="comp-line">
+                            📊 comp median <strong><?= money($comp['median'], $a['currency']) ?></strong>
+                            <span class="sub">(<?= (int)$comp['count'] ?> sales)</span>
+                            <?php if ($underPct !== null && $underPct > 0): ?>
+                                · <span class="under">▼ <?= (int)$underPct ?>% under</span>
+                            <?php elseif ($underPct !== null && $underPct < 0): ?>
+                                · <span class="over">▲ <?= abs((int)$underPct) ?>% over</span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
 
                     <?php if ($st && $st['snaps'] > 1): ?>
                         <div class="bidtrail">

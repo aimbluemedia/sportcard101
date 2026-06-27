@@ -19,6 +19,7 @@ $siteFields = [
     'hero_subtitle'          => ['Homepage subtitle', 'textarea'],
     'skool_url'              => ['Skool community URL', 'text'],
     'enable_member_searches' => ['Let members run their own AI searches (1 = on, 0 = off)', 'text'],
+    'cron_key'               => ['Cron secret key (for automatic scanning via cron.php)', 'text'],
 ];
 
 // eBay Partner Network — affiliate tracking (commission links).

@@ -43,14 +43,25 @@ final class DealFinder
             return [];
         }
 
-        $baseline  = $this->baseline(array_column($listings, 'price'));
+        // Fallback baseline: median of comparable ACTIVE listings in this search.
+        $activeBaseline = $this->baseline(array_column($listings, 'price'));
         $threshold = (int)$search['threshold_pct'];
         $maxPrice  = $search['max_price'] !== null ? (float)$search['max_price'] : null;
+        $sport = (string)($search['keywords'] ?? '');
+        $grade = (string)($search['grade'] ?? '');
 
         $newDeals = [];
         $dealCandidates = [];
 
         foreach ($listings as $l) {
+            // Prefer this card's own SOLD-comp median (real market) when we have
+            // enough history; otherwise fall back to the active-listing median.
+            $key  = Comps::cardKey((string)$l['title']);
+            $comp = Comps::statsFor($this->pdo, $sport, $grade, $key);
+            $baseline = ($comp && $comp['count'] >= Comps::MIN_FOR_BASELINE)
+                ? (float)$comp['median']
+                : $activeBaseline;
+
             $discount = $baseline > 0 ? round((($baseline - $l['price']) / $baseline) * 100, 2) : 0.0;
             $isDeal   = $discount >= $threshold && ($maxPrice === null || $l['price'] <= $maxPrice);
 

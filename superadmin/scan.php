@@ -9,6 +9,7 @@ use SportCard101\EbayClient;
 use SportCard101\AiAnalyst;
 use SportCard101\DealFinder;
 use SportCard101\Notifier;
+use SportCard101\Comps;
 
 Auth::requireAdmin();
 
@@ -53,13 +54,17 @@ try {
         $scope = 'all channels';
     }
 
+    // Lock in any auctions that have since closed as sold comps.
+    $recorded = Comps::recordClosed($pdo);
+
     $notifier->notify($newDeals);
     $n = count($newDeals);
+    $compMsg = $recorded ? " {$recorded} sold comp" . ($recorded === 1 ? '' : 's') . " recorded." : '';
     flash(
         $n ? 'success' : 'info',
-        $n
+        ($n
             ? "Scanned {$scope} — {$n} new deal" . ($n === 1 ? '' : 's') . " flagged!"
-            : "Scanned {$scope} — auctions captured, no new under-market deals flagged."
+            : "Scanned {$scope} — auctions captured, no new under-market deals flagged.") . $compMsg
     );
 } catch (\Throwable $e) {
     flash('error', 'Scan failed: ' . $e->getMessage());
