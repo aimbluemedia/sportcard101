@@ -9,68 +9,59 @@ use SportCard101\DealFinder;
 
 Auth::requireAdmin();
 
-$SPORTS    = card_sports();
-$COMPANIES = card_companies();
+$SPORTS     = card_sports();
 $GRADE_NUMS = card_grade_nums();
+$COMPANY    = 'PSA'; // this board is PSA-only
 $uid = Auth::userId();
 
-// Seed the headline channels (PSA 10 & BGS 10 across every sport) so the board
-// is never empty on a fresh install. Other company/grade combos are created on
-// demand when scanned. Idempotent.
+// Seed the headline PSA 10 channel for every sport so the board is never empty.
 foreach ($SPORTS as $key => $meta) {
-    foreach (['PSA 10', 'BGS 10'] as $g) {
-        DealFinder::ensureChannel($pdo, $uid, $key, $meta['emoji'] . ' ' . $meta['label'] . ' — ' . $g, $g);
-    }
+    DealFinder::ensureChannel($pdo, $uid, $key, $meta['emoji'] . ' ' . $meta['label'] . ' — PSA 10', 'PSA 10');
 }
 
 // ------------------------------------------------------------------- Filters
-// Defaults: the main page lands on PSA, every sport, all upcoming, all grades.
-$when    = ($_GET['when'] ?? 'soon') === 'today' ? 'today' : 'soon';
-$sport   = isset($_GET['sport']) && isset($SPORTS[$_GET['sport']]) ? (string)$_GET['sport'] : 'all';
-$company = ($_GET['company'] ?? 'PSA');
-$company = ($company === 'all' || isset($COMPANIES[$company])) ? (string)$company : 'PSA';
-$grade   = in_array($_GET['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_GET['grade'] : 'all';
+$DEFAULTS = ['q' => '', 'sport' => 'all', 'grade' => 'all', 'sort' => 'ending'];
+$q     = trim((string)($_GET['q'] ?? ''));
+$sport = isset($_GET['sport']) && isset($SPORTS[$_GET['sport']]) ? (string)$_GET['sport'] : 'all';
+$grade = in_array($_GET['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_GET['grade'] : 'all';
+$sorts = ['ending' => 'Ending soonest', 'bids' => 'Most bids', 'price' => 'Highest bid'];
+$sort  = isset($sorts[$_GET['sort'] ?? '']) ? (string)$_GET['sort'] : 'ending';
 
-// Filter defaults — a value is omitted from board URLs when it matches these.
-$DEFAULTS = ['when' => 'soon', 'sport' => 'all', 'company' => 'PSA', 'grade' => 'all'];
-
-// The "all sports" landing shows only AI-flagged value picks (BUY/WATCH, i.e.
-// the cards with an under-market message). Drilling into one sport switches to
-// browsing every auction for that sport, filterable by PSA grade.
+// The "all sports" landing shows only AI-flagged value picks (BUY/WATCH).
+// Drilling into a sport browses every PSA auction for it, filterable by grade.
 $valueOnly = ($sport === 'all');
 
 // ------------------------------------------------------------------ Listings
-$where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL'];
+$where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL', 'l.end_time > UTC_TIMESTAMP()', "s.grade LIKE 'PSA %'"];
 $params = [];
-$where[] = $when === 'today' ? 'DATE(l.end_time) = UTC_DATE()' : 'l.end_time > UTC_TIMESTAMP()';
-
 if ($valueOnly) {
-    // Only listings the AI Opportunity Engine rated as value (have the message).
     $where[] = "l.ai_verdict IN ('BUY','WATCH') AND l.ai_reason IS NOT NULL AND l.ai_reason <> ''";
 }
 if ($sport !== 'all') {
     $where[] = 's.keywords = ?';
     $params[] = $sport;
+    if ($grade !== 'all') {
+        $where[] = 's.grade = ?';
+        $params[] = $COMPANY . ' ' . $grade;
+    }
 }
-// Grade is stored as "COMPANY NUM" (e.g. "PSA 10"): company = prefix, grade =
-// suffix. The grade filter only applies when drilled into a single sport.
-$applyGrade = ($sport !== 'all' && $grade !== 'all');
-if ($company !== 'all' && $applyGrade) {
-    $where[] = 's.grade = ?';
-    $params[] = $company . ' ' . $grade;
-} elseif ($company !== 'all') {
-    $where[] = 's.grade LIKE ?';
-    $params[] = $company . ' %';
-} elseif ($applyGrade) {
-    $where[] = 's.grade LIKE ?';
-    $params[] = '% ' . $grade;
+if ($q !== '') {
+    $where[] = '(l.title LIKE ? OR l.ai_card LIKE ?)';
+    $params[] = '%' . $q . '%';
+    $params[] = '%' . $q . '%';
 }
+
+$order = match ($sort) {
+    'bids'  => 'l.bid_count DESC, l.end_time ASC',
+    'price' => 'l.price DESC, l.end_time ASC',
+    default => 'l.end_time ASC',
+};
 
 $sql = 'SELECT l.*, s.label AS search_label, s.keywords AS sport_key, s.grade AS search_grade
         FROM listings l
         JOIN searches s ON s.id = l.search_id
         WHERE ' . implode(' AND ', $where) . '
-        ORDER BY l.end_time ASC
+        ORDER BY ' . $order . '
         LIMIT 120';
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
@@ -133,119 +124,81 @@ function trail_points(array $snaps, int $max = 6): array
     return $out;
 }
 
-/**
- * Build a board URL preserving the current filters with overrides. A value is
- * dropped from the query only when it equals its default, so e.g. choosing
- * "All" companies still emits company=all to override the PSA default.
- */
+/** Build a board URL preserving current filters with overrides (drops defaults). */
 function board_url(array $over, array $cur, array $def): string
 {
-    $vals = [
-        'when'    => $over['when']    ?? $cur['when'],
-        'sport'   => $over['sport']   ?? $cur['sport'],
-        'company' => $over['company'] ?? $cur['company'],
-        'grade'   => $over['grade']   ?? $cur['grade'],
-    ];
+    $vals = array_merge($cur, $over);
     $p = [];
-    foreach ($vals as $k => $v) {
-        if ($v !== '' && $v !== $def[$k]) {
+    foreach (['q', 'sport', 'grade', 'sort'] as $k) {
+        $v = (string)($vals[$k] ?? '');
+        if ($v !== '' && $v !== ($def[$k] ?? '')) {
             $p[$k] = $v;
         }
     }
     return '/superadmin/auctions.php' . ($p ? '?' . http_build_query($p) : '');
 }
-$cur = ['when' => $when, 'sport' => $sport, 'company' => $company, 'grade' => $grade];
+$cur = ['q' => $q, 'sport' => $sport, 'grade' => $grade, 'sort' => $sort];
 
 layout_header('Auctions', 'admin');
 ?>
 <h1>🔨 Graded Card Auctions</h1>
 <?php if ($valueOnly): ?>
-    <p class="sub">💎 <strong>Value picks across all sports</strong> — only auctions the AI Opportunity Engine rated under market (e.g. <em>“About 71% below the going rate…”</em>). Click a sport below to browse <em>all</em> its auctions and filter by PSA grade.</p>
+    <p class="sub">💎 PSA value picks across all sports — only auctions the AI rated under market. Tap a sport to browse all of its PSA auctions and filter by grade.</p>
 <?php else: ?>
-    <p class="sub">Browsing <strong><?= e($SPORTS[$sport]['emoji'] . ' ' . $SPORTS[$sport]['label']) ?></strong> auctions — use the grade filter to narrow by PSA grade. <a href="<?= e(board_url(['sport' => 'all'], $cur, $DEFAULTS)) ?>">← back to value picks (all sports)</a></p>
+    <p class="sub">Browsing <strong><?= e($SPORTS[$sport]['emoji'] . ' ' . $SPORTS[$sport]['label']) ?></strong> PSA auctions. <a href="<?= e(board_url(['sport' => 'all', 'grade' => 'all'], $cur, $DEFAULTS)) ?>">← back to value picks</a></p>
 <?php endif; ?>
 
-<!-- Scan a specific company + grade (+ sport). Channels are created on demand. -->
-<form method="post" action="/superadmin/scan.php" class="scanpanel"><?= csrf_field() ?>
-    <input type="hidden" name="when" value="<?= e($when) ?>">
-    <div class="scanpanel-field">
-        <label>Grading company</label>
-        <select name="company">
-            <?php foreach ($COMPANIES as $code => $label): ?>
-                <option value="<?= e($code) ?>"<?= ($company !== 'all' ? $company : 'PSA') === $code ? ' selected' : '' ?>><?= e($label) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <div class="scanpanel-field">
-        <label>Grade</label>
-        <select name="grade">
-            <?php foreach ($GRADE_NUMS as $g): ?>
-                <option value="<?= e($g) ?>"<?= ($grade !== 'all' ? $grade : '10') === $g ? ' selected' : '' ?>><?= e($g) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <div class="scanpanel-field">
-        <label>Sport</label>
-        <select name="sport">
-            <option value="all"<?= $sport === 'all' ? ' selected' : '' ?>>All sports</option>
-            <?php foreach ($SPORTS as $key => $meta): ?>
-                <option value="<?= e($key) ?>"<?= $sport === $key ? ' selected' : '' ?>><?= e($meta['emoji'] . ' ' . $meta['label']) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <div class="scanpanel-field">
-        <label>&nbsp;</label>
-        <button class="btn btn-scan" type="submit">⟳ Scan this</button>
-    </div>
+<!-- Search bar -->
+<form method="get" action="/superadmin/auctions.php" class="searchbar">
+    <input type="search" name="q" value="<?= e($q) ?>" placeholder="Search card, player, team, keyword…" class="searchbar-input">
+    <select name="sport" class="searchbar-select">
+        <option value="all"<?= $sport === 'all' ? ' selected' : '' ?>>All sports</option>
+        <?php foreach ($SPORTS as $key => $meta): ?>
+            <option value="<?= e($key) ?>"<?= $sport === $key ? ' selected' : '' ?>><?= e($meta['emoji'] . ' ' . $meta['label']) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <select name="sort" class="searchbar-select">
+        <?php foreach ($sorts as $val => $label): ?>
+            <option value="<?= e($val) ?>"<?= $sort === $val ? ' selected' : '' ?>><?= e($label) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <button class="btn-search" type="submit">Search</button>
+    <a class="btn btn-reset" href="/superadmin/auctions.php">Reset</a>
 </form>
-<form method="post" action="/superadmin/scan.php" class="inline" style="margin:-6px 0 0"><?= csrf_field() ?>
-    <input type="hidden" name="when" value="<?= e($when) ?>">
-    <button class="btn" type="submit">↻ Rescan all channels</button>
-</form>
-<p class="sub" style="margin:2px 0 18px">PSA grades are whole numbers; BGS / SGC / CGC also use half grades (9.5). “Rescan all channels” refreshes everything already on the board.</p>
 
-<!-- Filters -->
-<div class="filterbar">
-    <span class="filterbar-label">Company:</span>
-    <a class="chip<?= $company === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
-    <?php foreach ($COMPANIES as $code => $label): ?>
-        <a class="chip<?= $company === $code ? ' chip-on' : '' ?>" href="<?= e(board_url(['company' => $code], $cur, $DEFAULTS)) ?>"><?= e($label) ?></a>
+<!-- Sport chips -->
+<div class="sportchips">
+    <a class="sportchip<?= $sport === 'all' ? ' sportchip-on' : '' ?>" href="<?= e(board_url(['sport' => 'all', 'grade' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
+    <?php foreach ($SPORTS as $key => $meta): ?>
+        <a class="sportchip<?= $sport === $key ? ' sportchip-on' : '' ?>" href="<?= e(board_url(['sport' => $key, 'grade' => 'all'], $cur, $DEFAULTS)) ?>"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></a>
     <?php endforeach; ?>
 </div>
-<div class="filterbar">
-    <?php if ($sport !== 'all'): // PSA grade filter appears when drilled into a sport ?>
-        <span class="filterbar-label">Grade:</span>
+
+<?php if ($sport !== 'all'): // Grade filter + scan, shown under the selected sport ?>
+    <div class="gradebar">
+        <span class="filterbar-label">PSA grade:</span>
         <a class="chip<?= $grade === 'all' ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => 'all'], $cur, $DEFAULTS)) ?>">All</a>
         <?php foreach ($GRADE_NUMS as $g): ?>
             <a class="chip<?= $grade === $g ? ' chip-on' : '' ?>" href="<?= e(board_url(['grade' => $g], $cur, $DEFAULTS)) ?>"><?= e($g) ?></a>
         <?php endforeach; ?>
-        <span class="filterbar-label" style="margin-left:18px">When:</span>
-    <?php else: ?>
-        <span class="filterbar-label">When:</span>
-    <?php endif; ?>
-    <a class="chip<?= $when === 'today' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'today'], $cur, $DEFAULTS)) ?>">⏰ Closing today</a>
-    <a class="chip<?= $when === 'soon' ? ' chip-on' : '' ?>" href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">📅 All upcoming</a>
-</div>
-
-<!-- Sport tabs -->
-<div class="tabs" style="margin-bottom:18px">
-    <a class="tab<?= $sport === 'all' ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => 'all'], $cur, $DEFAULTS)) ?>">All sports</a>
-    <?php foreach ($SPORTS as $key => $meta): ?>
-        <a class="tab<?= $sport === $key ? ' tab-active' : '' ?>" href="<?= e(board_url(['sport' => $key], $cur, $DEFAULTS)) ?>"><?= e($meta['emoji'] . ' ' . $meta['label']) ?></a>
-    <?php endforeach; ?>
-</div>
+        <form method="post" action="/superadmin/scan.php" class="inline" style="margin-left:auto"><?= csrf_field() ?>
+            <input type="hidden" name="company" value="PSA">
+            <input type="hidden" name="sport" value="<?= e($sport) ?>">
+            <input type="hidden" name="grade" value="<?= e($grade === 'all' ? '10' : $grade) ?>">
+            <input type="hidden" name="when" value="soon">
+            <button class="btn btn-scan" type="submit">⟳ Scan PSA <?= e($grade === 'all' ? '10' : $grade) ?> · <?= e($SPORTS[$sport]['label']) ?></button>
+        </form>
+    </div>
+<?php endif; ?>
 
 <?php if (!$auctions): ?>
     <div class="empty">
         <?php if ($valueOnly): ?>
-            No value picks <?= $when === 'today' ? 'ending today ' : '' ?>yet — the AI hasn't flagged any under-market PSA auctions.<br>
-            Hit <strong>⟳ Scan this</strong> (or <strong>↻ Rescan all channels</strong>) to pull fresh auctions; flagged deals show up here.
-            <?php if ($when === 'today'): ?> You can also check <a href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">all upcoming</a>, or click a sport tab to browse every auction.<?php else: ?> Or click a sport tab to browse every auction regardless of value.<?php endif; ?>
+            No PSA value picks yet — the AI hasn't flagged any under-market auctions<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?>.<br>
+            Tap a sport and hit its <strong>⟳ Scan</strong> button to pull fresh auctions; flagged deals show up here.
         <?php else: ?>
-            No <?= e($SPORTS[$sport]['label']) ?> auctions match this filter
-            <?= $when === 'today' ? '(ending today)' : '' ?> yet.<br>
-            Set the company, grade &amp; sport above and hit <strong>⟳ Scan this</strong> to pull them from eBay
-            <?php if ($when === 'today'): ?>— or check <a href="<?= e(board_url(['when' => 'soon'], $cur, $DEFAULTS)) ?>">all upcoming</a>.<?php endif; ?>
+            No <?= e($SPORTS[$sport]['label']) ?> PSA auctions match<?= $q !== '' ? ' “' . e($q) . '”' : '' ?> yet.<br>
+            Use the <strong>⟳ Scan</strong> button above to pull them from eBay.
         <?php endif; ?>
     </div>
 <?php else: ?>
@@ -313,10 +266,14 @@ layout_header('Auctions', 'admin');
             </div>
         <?php endforeach; ?>
     </div>
-    <p class="sub" style="margin-top:14px">
-        Each price in the bid trail is the current high bid recorded at that scan; the superscript is the bid count at that moment.
-        <strong>📈 bids/hr</strong> = how fast bids arrive while we track. Ended auctions show the last bid captured before close — finer if you scan more often.
-    </p>
 <?php endif; ?>
+
+<div class="rescan-foot">
+    <form method="post" action="/superadmin/scan.php" class="inline"><?= csrf_field() ?>
+        <input type="hidden" name="when" value="soon">
+        <button class="btn" type="submit">↻ Rescan everything</button>
+    </form>
+    <span class="sub">Each scan records a bid snapshot and re-rates value. Run periodically (or via cron) to keep picks fresh.</span>
+</div>
 <?php
 layout_footer();
