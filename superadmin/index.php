@@ -33,7 +33,7 @@ layout_header('Dashboard', 'admin');
     <section class="panel">
         <div class="panel-head"><h2>Quick actions</h2></div>
         <p><a class="btn" href="/superadmin/searches.php">Configure AI searches</a>
-           <a class="btn" href="/superadmin/deals.php">View AI deals</a></p>
+           <a class="btn" href="/superadmin/auctions.php">View auctions</a></p>
         <p><a class="btn" href="/superadmin/pricing.php">Edit pricing</a>
            <a class="btn" href="/superadmin/content.php">Edit school content</a></p>
     </section>

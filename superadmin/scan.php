@@ -31,4 +31,4 @@ try {
     flash('error', 'Scan failed: ' . $e->getMessage());
 }
 
-redirect('/superadmin/deals.php');
+redirect('/superadmin/auctions.php');
