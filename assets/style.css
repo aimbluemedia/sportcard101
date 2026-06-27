@@ -115,6 +115,18 @@ form.stack input, form.stack select {
 .ai-reason { font-size: .85rem; color: var(--text); background: var(--panel-2); border-left: 3px solid var(--accent);
     padding: 6px 10px; border-radius: 0 6px 6px 0; margin-top: 8px; }
 
+/* Auction bid trail */
+.deal .price .bidlabel { font-size: .72rem; font-weight: 600; color: var(--muted); margin-left: 6px; letter-spacing: .02em; }
+.deal.ended { opacity: .9; }
+.badge-ended { background: var(--panel-2); color: var(--muted); }
+.bidtrail { margin-top: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.bidtrail-head { font-size: .76rem; color: var(--muted); margin-bottom: 6px; }
+.bidtrail-head .rise { color: var(--green); font-weight: 700; margin-left: 4px; }
+.bidtrail-points { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; font-size: .82rem; }
+.bidtrail-points .pt { font-weight: 700; color: var(--text); white-space: nowrap; }
+.bidtrail-points .pt sup { color: var(--accent); font-size: .62rem; font-weight: 700; margin-left: 1px; }
+.bidtrail-points .arrow { color: var(--muted); }
+
 /* ===== Multi-area additions (homepage, member, admin) ===== */
 .btn-lg { padding: 12px 22px; font-size: 1.05rem; }
 .btn-sm { padding: 4px 10px; font-size: .82rem; }
