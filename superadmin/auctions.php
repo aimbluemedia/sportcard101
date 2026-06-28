@@ -180,7 +180,6 @@ layout_header('Auctions', 'admin');
         <?php endforeach; ?>
     </select>
     <button class="btn-search" type="submit">Search</button>
-    <a class="btn btn-reset" href="/superadmin/auctions.php">Reset</a>
 </form>
 
 <?php if ($sport !== 'all'): // Grade filter + scan, shown under the selected sport ?>
