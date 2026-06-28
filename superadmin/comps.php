@@ -142,41 +142,41 @@ layout_header('Sold Comps', 'admin');
         auctions close (with at least one bid). Keep the scanner/cron running and check back.
     </div>
 <?php else: ?>
-    <table class="comps-table">
-        <thead>
-            <tr>
-                <th>Card</th><th>Grade</th><th>Sport</th>
-                <th class="num">Sales</th><th class="num">Median</th><th class="num">Range</th>
-                <th class="num">Avg bids</th><th class="num">Trend</th><th>Last sold</th><th></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($cards as $c):
-                $sportLabel = $SPORTS[$c['sport']]['emoji'] ?? '';
-            ?>
-                <tr>
-                    <td class="comps-card">
-                        <?php if ($c['image']): ?><img src="<?= e($c['image']) ?>" alt="" loading="lazy"><?php endif; ?>
-                        <span><?= e($c['card']) ?></span>
-                    </td>
-                    <td><span class="gradetag"><?= e((string)$c['grade']) ?></span></td>
-                    <td><?= e($sportLabel . ' ' . ($SPORTS[$c['sport']]['label'] ?? (string)$c['sport'])) ?></td>
-                    <td class="num"><strong><?= (int)$c['count'] ?></strong></td>
-                    <td class="num money"><?= money($c['median']) ?></td>
-                    <td class="num sub"><?= money($c['low']) ?>–<?= money($c['high']) ?></td>
-                    <td class="num"><?= $c['avg_bids'] ?></td>
-                    <td class="num">
-                        <?php if ($c['trend'] > 2): ?><span class="trend-up">▲ <?= $c['trend'] ?>%</span>
-                        <?php elseif ($c['trend'] < -2): ?><span class="trend-down">▼ <?= abs($c['trend']) ?>%</span>
-                        <?php else: ?><span class="sub">flat</span><?php endif; ?>
-                    </td>
-                    <td class="sub"><?= $c['last'] ? e(date('M j', strtotime((string)$c['last']))) : '—' ?></td>
-                    <td><a class="btn btn-sm" href="<?= e(epn_search_link($c['title'])) ?>" target="_blank" rel="noopener">Find live →</a></td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-    <p class="sub" style="margin-top:14px">Median is the typical sale price for that card; “Range” is low–high; “Trend” compares the older half of sales to the newer half. A comp = the last bid we recorded before an auction closed (≥1 bid), so accuracy improves the more often the scanner runs.</p>
+    <div class="comp-cards">
+        <?php foreach ($cards as $c):
+            $sportLabel = trim(($SPORTS[$c['sport']]['emoji'] ?? '') . ' ' . ($SPORTS[$c['sport']]['label'] ?? (string)$c['sport']));
+        ?>
+            <div class="comp-card">
+                <div class="comp-card-top">
+                    <?php if ($c['image']): ?><img src="<?= e($c['image']) ?>" alt="" loading="lazy"><?php else: ?><div class="comp-noimg">🃏</div><?php endif; ?>
+                    <div class="comp-card-head">
+                        <div class="comp-card-name"><?= e($c['card']) ?></div>
+                        <div class="comp-card-tags">
+                            <span class="gradetag"><?= e((string)$c['grade']) ?></span>
+                            <?php if ($sportLabel !== ''): ?><span class="sporttag"><?= e($sportLabel) ?></span><?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="comp-median">
+                    <span class="cm-val"><?= money($c['median']) ?></span>
+                    <span class="cm-lbl">median sold</span>
+                    <?php if ($c['trend'] > 2): ?><span class="trend-up">▲ <?= $c['trend'] ?>%</span>
+                    <?php elseif ($c['trend'] < -2): ?><span class="trend-down">▼ <?= abs($c['trend']) ?>%</span><?php endif; ?>
+                </div>
+                <div class="comp-range">Range <strong><?= money($c['low']) ?> – <?= money($c['high']) ?></strong></div>
+
+                <div class="comp-stats">
+                    <div><span class="n"><?= (int)$c['count'] ?></span><span class="l">sales</span></div>
+                    <div><span class="n"><?= $c['avg_bids'] ?></span><span class="l">avg bids</span></div>
+                    <div><span class="n"><?= $c['last'] ? e(date('M j', strtotime((string)$c['last']))) : '—' ?></span><span class="l">last sold</span></div>
+                </div>
+
+                <a class="btn btn-sm comp-find" href="<?= e(epn_search_link($c['title'])) ?>" target="_blank" rel="noopener">Find live on eBay →</a>
+            </div>
+        <?php endforeach; ?>
+    </div>
+    <p class="sub" style="margin-top:16px">Median is the typical sale price for that card; “Range” is low–high; “Trend” compares the older half of sales to the newer half. A comp = the last bid we recorded before an auction closed (≥1 bid), so accuracy improves the more often the scanner runs.</p>
 <?php endif; ?>
 <?php
 layout_footer();
