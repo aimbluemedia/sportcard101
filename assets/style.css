@@ -148,14 +148,14 @@ form.stack input, form.stack select {
 .scanpanel-field .btn { white-space: nowrap; }
 
 /* Search bar (VIPS Directory style) */
-.searchbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+.searchbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
     padding: 16px 20px; margin: 6px 0 18px; }
-.searchbar-input { flex: 1 1 300px; min-width: 220px; padding: 13px 18px; border-radius: 10px;
+.searchbar-input { flex: 1 1 150px; min-width: 130px; padding: 13px 16px; border-radius: 10px;
     border: 1px solid var(--border); background: #0a0d12; color: var(--text); font-size: .95rem; }
 .searchbar-input::placeholder { color: var(--muted); }
-.searchbar-select { padding: 13px 16px; border-radius: 10px; border: 1px solid var(--border);
-    background: #0a0d12; color: var(--text); font-size: .92rem; min-width: 160px; cursor: pointer; }
+.searchbar-select { padding: 13px 12px; border-radius: 10px; border: 1px solid var(--border);
+    background: #0a0d12; color: var(--text); font-size: .92rem; min-width: 130px; cursor: pointer; }
 .btn-search { padding: 13px 30px; border: none; border-radius: 999px; cursor: pointer;
     font-weight: 800; font-size: .95rem; color: #2a1500;
     background: linear-gradient(90deg, #ffb000, #ff7a9c); box-shadow: 0 2px 14px rgba(255,140,80,.25); }
