@@ -28,16 +28,21 @@ $grade = in_array($_GET['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_GET['grad
 $sorts = ['ending' => 'Ending soonest', 'bids' => 'Most bids', 'price' => 'Highest bid'];
 $sort  = isset($sorts[$_GET['sort'] ?? '']) ? (string)$_GET['sort'] : 'ending';
 
-// "Show" dropdown: value picks (auctions with an AI message) or all auctions.
-// The landing page defaults to value picks across all sports, any PSA grade.
-$show      = ($_GET['show'] ?? 'value') === 'all' ? 'all' : 'value';
-$valueOnly = ($show === 'value');
+// "Show" dropdown: value picks (auctions with an AI message), signed/autograph
+// cards, or all auctions. The landing page defaults to value picks.
+$show       = in_array($_GET['show'] ?? 'value', ['value', 'signed', 'all'], true) ? (string)$_GET['show'] : 'value';
+$valueOnly  = ($show === 'value');
+$signedOnly = ($show === 'signed');
 
 // ------------------------------------------------------------------ Listings
 $where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL', 'l.end_time > UTC_TIMESTAMP()', "s.grade LIKE 'PSA %'"];
 $params = [];
 if ($valueOnly) {
     $where[] = "l.ai_verdict IN ('BUY','WATCH') AND l.ai_reason IS NOT NULL AND l.ai_reason <> ''";
+}
+if ($signedOnly) {
+    // Autographed cards — detected from the listing title.
+    $where[] = "(l.title LIKE '%auto%' OR l.title LIKE '%autograph%' OR l.title LIKE '%signed%' OR l.title LIKE '%signature%')";
 }
 if ($sport !== 'all') {
     $where[] = 's.keywords = ?';
@@ -172,6 +177,7 @@ layout_header('Auctions', 'admin');
     </select>
     <select name="show" class="searchbar-select">
         <option value="value"<?= $show === 'value' ? ' selected' : '' ?>>💎 With messages</option>
+        <option value="signed"<?= $show === 'signed' ? ' selected' : '' ?>>✍️ Signed / autograph</option>
         <option value="all"<?= $show === 'all' ? ' selected' : '' ?>>All auctions</option>
     </select>
     <select name="sort" class="searchbar-select">
@@ -204,6 +210,9 @@ layout_header('Auctions', 'admin');
         <?php if ($valueOnly): ?>
             No PSA value picks yet — the AI hasn't flagged any under-market auctions<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?>.<br>
             Scan to pull fresh auctions, or switch <strong>“With messages” → “All auctions”</strong> in the bar to see everything captured.
+        <?php elseif ($signedOnly): ?>
+            No signed / autograph PSA auctions captured<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?> yet.<br>
+            These are detected from the listing title (auto / signed). Scan to pull fresh auctions, or switch to <strong>“All auctions”</strong>.
         <?php else: ?>
             No PSA auctions captured<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?> yet.<br>
             <?php if ($sport !== 'all'): ?>Use the <strong>⟳ Scan</strong> button above<?php else: ?>Tap a sport and hit its <strong>⟳ Scan</strong> button<?php endif; ?> to pull them from eBay.
