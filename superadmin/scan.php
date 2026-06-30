@@ -8,8 +8,8 @@ use SportCard101\Auth;
 use SportCard101\EbayClient;
 use SportCard101\AiAnalyst;
 use SportCard101\DealFinder;
-use SportCard101\Notifier;
 use SportCard101\Comps;
+use SportCard101\DealAlerts;
 
 Auth::requireAdmin();
 
@@ -21,7 +21,6 @@ csrf_verify();
 $ebay   = new EbayClient(ebay_config($config['ebay']));
 $ai     = new AiAnalyst($config['ai']);
 $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
-$notifier = new Notifier($pdo, $config['mail']);
 $uid = Auth::userId();
 
 $sports    = card_sports();
@@ -56,10 +55,12 @@ try {
 
     // Lock in any auctions that have since closed as sold comps.
     $recorded = Comps::recordClosed($pdo);
+    // Email comp-beating auctions (respects the Deal Alerts settings).
+    $alerts = DealAlerts::run($pdo);
 
-    $notifier->notify($newDeals);
     $n = count($newDeals);
     $compMsg = $recorded ? " {$recorded} sold comp" . ($recorded === 1 ? '' : 's') . " recorded." : '';
+    $compMsg .= $alerts ? ' ' . count($alerts) . ' deal alert' . (count($alerts) === 1 ? '' : 's') . ' emailed.' : '';
     flash(
         $n ? 'success' : 'info',
         ($n

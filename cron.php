@@ -23,8 +23,8 @@ require __DIR__ . '/src/bootstrap.php';
 use SportCard101\EbayClient;
 use SportCard101\AiAnalyst;
 use SportCard101\DealFinder;
-use SportCard101\Notifier;
 use SportCard101\Comps;
+use SportCard101\DealAlerts;
 
 header('Content-Type: text/plain; charset=utf-8');
 
@@ -55,17 +55,15 @@ $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 10
 
 $started = microtime(true);
 try {
-    $newDeals = $finder->scanSelected($uid, null, null); // scanSelected also records closes
-    $recorded = Comps::recordClosed($pdo);               // belt-and-suspenders
-
-    if ($newDeals && !empty($config['mail']['enabled'])) {
-        (new Notifier($pdo, $config['mail']))->notify($newDeals);
-    }
+    $newDeals = $finder->scanSelected($uid, null, null);
+    $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
+    $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions
 
     $secs = round(microtime(true) - $started, 1);
     echo "OK\n";
     echo "new deals flagged: " . count($newDeals) . "\n";
     echo "new sold comps:    {$recorded}\n";
+    echo "deal alerts sent:  " . count($alerts) . "\n";
     echo "ebay mode:         " . ($ebay->isMock() ? 'mock (no keyset)' : 'live') . "\n";
     echo "took:              {$secs}s\n";
 } catch (\Throwable $e) {

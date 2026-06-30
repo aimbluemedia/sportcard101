@@ -41,13 +41,24 @@ $devFields = [
     'ebay_cache_hours' => ['Cache Hours', 'How long to cache eBay results.'],
 ];
 
-$allFields = $siteFields + $epnFields + $devFields;
+// Email deal alerts — the agent emails you when an auction beats these.
+$alertFields = [
+    'notify_enabled'        => ['Enable email deal alerts (1 = on, 0 = off)', 'text'],
+    'notify_email'          => ['Send alerts to this email address', 'text'],
+    'notify_min_under_comp' => ['Alert when current bid is at least this % under the comp median', 'text'],
+    'notify_within_hours'   => ['Only alert when ending within N hours (blank = any time)', 'text'],
+    'notify_max_price'      => ['Only alert at or below this price (blank = no cap)', 'text'],
+    'notify_from'           => ['"From" address for alert emails (optional)', 'text'],
+];
+
+$allFields = $siteFields + $alertFields + $epnFields + $devFields;
 $secretKeys = ['ebay_auth_token', 'ebay_cert_id'];
 
 $defaults = [
-    'ebay_marketplace' => 'EBAY_US',
-    'ebay_endpoint'    => 'https://api.ebay.com',
-    'ebay_cache_hours' => '12',
+    'ebay_marketplace'      => 'EBAY_US',
+    'ebay_endpoint'         => 'https://api.ebay.com',
+    'ebay_cache_hours'      => '12',
+    'notify_min_under_comp' => '20',
 ];
 
 // Test the Browse keyset (powers the scanner) using the currently SAVED values.
@@ -92,6 +103,15 @@ layout_header('Settings', 'admin');
         <?php else: ?>
             <input name="<?= e($key) ?>" value="<?= e((string)$val) ?>">
         <?php endif; ?>
+    <?php endforeach; ?>
+
+    <hr style="margin:26px 0 8px">
+    <h2>🔔 Deal Alerts <small style="color:var(--muted);font-weight:400">— email me when an auction beats comp</small></h2>
+    <p class="sub">The cron agent checks each scan and emails you when a live PSA auction is enough under its comp median. Needs sold comps to compare against.</p>
+    <?php foreach ($alertFields as $key => $def):
+        [$label, $type] = $def; $val = setting($key, $defaults[$key] ?? ''); ?>
+        <label><?= e($label) ?></label>
+        <input name="<?= e($key) ?>" value="<?= e((string)$val) ?>">
     <?php endforeach; ?>
 
     <hr style="margin:26px 0 8px">

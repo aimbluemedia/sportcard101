@@ -175,6 +175,7 @@ form.stack input, form.stack select {
 .rescan-foot .sub { margin: 0; }
 
 /* Comp line + snipe on auction cards */
+.comptag { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); font-size: .68rem; font-weight: 700; padding: 1px 7px; border-radius: 5px; }
 .comp-line { font-size: .82rem; color: var(--muted); margin-top: 8px; }
 .comp-line .under { color: var(--green); font-weight: 700; }
 .comp-line .over { color: var(--red); font-weight: 700; }
