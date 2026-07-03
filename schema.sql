@@ -188,3 +188,21 @@ CREATE TABLE IF NOT EXISTS sold_comps (
     KEY idx_card (sport, grade, card_key),
     KEY idx_closed (closed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Named deal-alert triggers. An auction alerts if it matches ANY active row.
+CREATE TABLE IF NOT EXISTS alert_triggers (
+    id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    label          VARCHAR(120) NOT NULL,
+    active         TINYINT(1)   NOT NULL DEFAULT 1,
+    sport          VARCHAR(32)  NOT NULL DEFAULT 'all',
+    grade          VARCHAR(16)  NOT NULL DEFAULT 'any',
+    signed         TINYINT(1)   NOT NULL DEFAULT 0,
+    keywords       VARCHAR(190) DEFAULT NULL,
+    max_price      DECIMAL(10,2) DEFAULT NULL,
+    min_under_comp DECIMAL(6,2) DEFAULT NULL,
+    require_comp   TINYINT(1)   NOT NULL DEFAULT 0,
+    within_hours   DECIMAL(6,1) DEFAULT NULL,
+    created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
