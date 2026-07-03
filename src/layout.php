@@ -23,7 +23,7 @@ function nav_links(string $area): array
             ['/superadmin/searches.php', 'AI App'],
             ['/superadmin/auctions.php', 'Auctions'],
             ['/superadmin/comps.php', 'Comps'],
-            ['/superadmin/afflink.php', 'Links'],
+            ['/superadmin/alerts.php', 'Alerts'],
             ['/superadmin/settings.php', 'Settings'],
         ],
         default => [
