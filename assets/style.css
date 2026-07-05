@@ -196,6 +196,14 @@ form.stack input, form.stack select {
 .trigger-conds { color: var(--muted); font-size: .84rem; margin-top: 3px; }
 .trigger-actions { display: flex; gap: 8px; }
 
+/* Trigger builder (search-bar styled) */
+.triggerbar { align-items: center; }
+.searchbar-input.tb-num { flex: 0 0 120px; min-width: 96px; }
+.tb-check { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px;
+    background: #0a0d12; color: var(--text); font-weight: 600; font-size: .88rem; cursor: pointer; }
+.tb-check input { width: auto; margin: 0; }
+
 /* Comps — card grid */
 .comp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
 .comp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; }

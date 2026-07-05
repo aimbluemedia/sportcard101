@@ -194,53 +194,32 @@ layout_header('Deal Alerts', 'admin');
 
 <!-- Add / edit trigger -->
 <h2 id="form" style="margin-top:28px"><?= $editing ? 'Edit trigger' : 'Add a trigger' ?></h2>
-<form method="post" class="card" style="max-width:760px"><?= csrf_field() ?>
+<form method="post" class="searchbar triggerbar"><?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update_trigger' : 'add_trigger' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int)$editing['id'] ?>"><?php endif; ?>
 
-    <label>Name <span class="sub">(optional — auto-named from the filters if blank)</span></label>
-    <input name="label" value="<?= e($fv('label')) ?>" placeholder="e.g. Baseball PSA 10 snipe">
-
-    <div class="row" style="margin-top:6px">
-        <div>
-            <label>Sport</label>
-            <select name="sport">
-                <option value="all"<?= $fv('sport','all')==='all'?' selected':'' ?>>Any sport</option>
-                <?php foreach ($SPORTS as $key => $meta): ?>
-                    <option value="<?= e($key) ?>"<?= $fv('sport')===$key?' selected':'' ?>><?= e($meta['emoji'].' '.$meta['label']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div>
-            <label>PSA grade</label>
-            <select name="grade">
-                <option value="any"<?= $fv('grade','any')==='any'?' selected':'' ?>>Any grade</option>
-                <?php foreach ($GRADE_NUMS as $g): ?>
-                    <option value="<?= e($g) ?>"<?= $fv('grade')===$g?' selected':'' ?>>PSA <?= e($g) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-    </div>
-
-    <div class="row">
-        <div><label>Max price ($)</label><input name="max_price" type="number" step="0.01" min="0" value="<?= e($fv('max_price')) ?>" placeholder="e.g. 25"></div>
-        <div><label>Min % under comp</label><input name="min_under_comp" type="number" step="0.1" min="0" value="<?= e($fv('min_under_comp')) ?>" placeholder="e.g. 20"></div>
-        <div><label>Ends within (hours)</label><input name="within_hours" type="number" step="0.5" min="0" value="<?= e($fv('within_hours')) ?>" placeholder="e.g. 1"></div>
-    </div>
-
-    <label>Title keyword</label>
-    <input name="keywords" value="<?= e($fv('keywords')) ?>" placeholder="e.g. Jordan, rookie, Topps Chrome">
-
-    <div style="margin-top:10px">
-        <label class="checkbox"><input type="checkbox" name="signed" value="1" <?= $chk('signed')?'checked':'' ?>> Only signed / autograph cards</label>
-        <label class="checkbox"><input type="checkbox" name="require_comp" value="1" <?= $chk('require_comp')?'checked':'' ?>> Only when priced under its comp (needs comp history)</label>
-    </div>
-
-    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit"><?= $editing ? 'Save changes' : 'Add trigger' ?></button>
-        <?php if ($editing): ?><a class="btn" href="/superadmin/alerts.php">Cancel</a><?php endif; ?>
-    </div>
-    <p class="field-help" style="margin-top:12px">Leave any field blank to ignore it. A trigger fires only when <em>all</em> its set conditions are met; you're alerted if an auction matches <em>any</em> active trigger. “% under comp” / “under comp” need sold-comp history for that card.</p>
+    <input name="label" class="searchbar-input" value="<?= e($fv('label')) ?>" placeholder="Trigger name (optional — auto-named)">
+    <select name="sport" class="searchbar-select">
+        <option value="all"<?= $fv('sport','all')==='all'?' selected':'' ?>>Any sport</option>
+        <?php foreach ($SPORTS as $key => $meta): ?>
+            <option value="<?= e($key) ?>"<?= $fv('sport')===$key?' selected':'' ?>><?= e($meta['emoji'].' '.$meta['label']) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <select name="grade" class="searchbar-select">
+        <option value="any"<?= $fv('grade','any')==='any'?' selected':'' ?>>Any grade</option>
+        <?php foreach ($GRADE_NUMS as $g): ?>
+            <option value="<?= e($g) ?>"<?= $fv('grade')===$g?' selected':'' ?>>PSA <?= e($g) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <input name="max_price" type="number" step="0.01" min="0" class="searchbar-input tb-num" value="<?= e($fv('max_price')) ?>" placeholder="Max $">
+    <input name="min_under_comp" type="number" step="0.1" min="0" class="searchbar-input tb-num" value="<?= e($fv('min_under_comp')) ?>" placeholder="% under comp">
+    <input name="within_hours" type="number" step="0.5" min="0" class="searchbar-input tb-num" value="<?= e($fv('within_hours')) ?>" placeholder="Ends ≤ hrs">
+    <input name="keywords" class="searchbar-input" value="<?= e($fv('keywords')) ?>" placeholder="Title keyword">
+    <label class="tb-check"><input type="checkbox" name="signed" value="1" <?= $chk('signed')?'checked':'' ?>> ✍️ Signed</label>
+    <label class="tb-check"><input type="checkbox" name="require_comp" value="1" <?= $chk('require_comp')?'checked':'' ?>> 📊 Under comp</label>
+    <button class="btn-search" type="submit"><?= $editing ? 'Save changes' : 'Add trigger' ?></button>
+    <?php if ($editing): ?><a class="btn btn-reset" href="/superadmin/alerts.php">Cancel</a><?php endif; ?>
 </form>
+<p class="field-help" style="max-width:900px">Leave any field blank to ignore it. A trigger fires only when <em>all</em> its set conditions are met; you're alerted if an auction matches <em>any</em> active trigger. “% under comp” / “Under comp” need sold-comp history for that card.</p>
 <?php
 layout_footer();
