@@ -224,7 +224,7 @@ layout_header('Auctions', 'admin');
             $snaps   = $series[(int)$a['id']] ?? null;
             $st      = bid_stats($snaps);
             $verdict = $a['ai_verdict'] ?? null;
-            $ended   = strtotime($a['end_time']) <= time();
+            $ended   = (hours_until($a['end_time']) ?? 0.0) <= 0;
 
             // Sold-comp comparison for this card.
             $ck   = Comps::cardKey((string)$a['title']);
@@ -232,7 +232,7 @@ layout_header('Auctions', 'admin');
             $underPct = ($comp && $comp['median'] > 0)
                 ? round((($comp['median'] - (float)$a['price']) / $comp['median']) * 100)
                 : null;
-            $hoursLeft = (strtotime($a['end_time']) - time()) / 3600;
+            $hoursLeft = hours_until($a['end_time']) ?? 0.0;
             $snipe = !$ended && $comp && $underPct !== null && $underPct >= 20 && $hoursLeft <= 8;
         ?>
             <div class="deal is-deal<?= $verdict ? ' v-' . strtolower($verdict) : '' ?><?= $ended ? ' ended' : '' ?><?= $snipe ? ' is-snipe' : '' ?>">

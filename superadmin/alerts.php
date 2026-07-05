@@ -15,7 +15,30 @@ $triggersReady = true;
 try {
     $pdo->query('SELECT 1 FROM alert_triggers LIMIT 1');
 } catch (\Throwable $e) {
-    $triggersReady = false; // table not migrated yet
+    $triggersReady = false;
+}
+
+/** Human summary of a trigger's conditions (also used to auto-name). */
+function trigger_summary(array $t, array $sports): string
+{
+    $p = [];
+    $p[] = ($t['sport'] ?? 'all') === 'all' ? 'Any sport' : ($sports[$t['sport']]['label'] ?? $t['sport']);
+    $p[] = ($t['grade'] ?? 'any') === 'any' ? 'any PSA grade' : ('PSA ' . $t['grade']);
+    if (!empty($t['signed']))   $p[] = 'signed/auto';
+    if (!empty($t['keywords'])) $p[] = '“' . $t['keywords'] . '”';
+    if (($t['max_price'] ?? null) !== null && $t['max_price'] !== '') {
+        $p[] = 'under $' . rtrim(rtrim(number_format((float)$t['max_price'], 2), '0'), '.');
+    }
+    $minU = $t['min_under_comp'] ?? null;
+    if (!empty($t['require_comp']) && ($minU === null || $minU === '' || (float)$minU <= 0)) {
+        $p[] = 'under comp';
+    } elseif ($minU !== null && $minU !== '' && (float)$minU > 0) {
+        $p[] = '≥' . rtrim(rtrim(number_format((float)$minU, 1), '0'), '.') . '% under comp';
+    }
+    if (($t['within_hours'] ?? null) !== null && $t['within_hours'] !== '') {
+        $p[] = 'ends ≤' . rtrim(rtrim(number_format((float)$t['within_hours'], 1), '0'), '.') . 'h';
+    }
+    return implode(' · ', $p);
 }
 
 // ---- Test email --------------------------------------------------------
@@ -46,32 +69,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $set->execute(['notify_email', trim((string)($_POST['notify_email'] ?? ''))]);
         $set->execute(['notify_from', trim((string)($_POST['notify_from'] ?? ''))]);
         flash('success', 'Alert settings saved.');
-    } elseif ($action === 'add_trigger' && $triggersReady) {
+        redirect('/superadmin/alerts.php');
+    }
+
+    if (($action === 'add_trigger' || $action === 'update_trigger') && $triggersReady) {
+        $sport = isset($SPORTS[$_POST['sport'] ?? '']) ? (string)$_POST['sport'] : 'all';
+        $grade = in_array($_POST['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_POST['grade'] : 'any';
+        $numOrNull = fn ($k) => ($_POST[$k] ?? '') === '' ? null : (float)$_POST[$k];
+        $data = [
+            'sport'          => $sport,
+            'grade'          => $grade,
+            'signed'         => isset($_POST['signed']) ? 1 : 0,
+            'keywords'       => trim((string)($_POST['keywords'] ?? '')) ?: null,
+            'max_price'      => $numOrNull('max_price'),
+            'min_under_comp' => $numOrNull('min_under_comp'),
+            'require_comp'   => isset($_POST['require_comp']) ? 1 : 0,
+            'within_hours'   => $numOrNull('within_hours'),
+        ];
+        // Name is optional — auto-name from the conditions when blank.
         $label = trim((string)($_POST['label'] ?? ''));
         if ($label === '') {
-            flash('error', 'Give the trigger a name.');
-        } else {
-            $sport = isset($SPORTS[$_POST['sport'] ?? '']) ? (string)$_POST['sport'] : 'all';
-            $grade = in_array($_POST['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_POST['grade'] : 'any';
-            $numOrNull = fn ($k) => ($_POST[$k] ?? '') === '' ? null : (float)$_POST[$k];
+            $label = trigger_summary($data, $SPORTS);
+        }
+        $label = mb_substr($label, 0, 120);
+
+        if ($action === 'add_trigger') {
             $pdo->prepare(
                 'INSERT INTO alert_triggers
                     (label, active, sport, grade, signed, keywords, max_price, min_under_comp, require_comp, within_hours)
                  VALUES (?,1,?,?,?,?,?,?,?,?)'
-            )->execute([
-                mb_substr($label, 0, 120),
-                $sport,
-                $grade,
-                isset($_POST['signed']) ? 1 : 0,
-                trim((string)($_POST['keywords'] ?? '')) ?: null,
-                $numOrNull('max_price'),
-                $numOrNull('min_under_comp'),
-                isset($_POST['require_comp']) ? 1 : 0,
-                $numOrNull('within_hours'),
-            ]);
+            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['keywords'],
+                        $data['max_price'], $data['min_under_comp'], $data['require_comp'], $data['within_hours']]);
             flash('success', 'Trigger added.');
+        } else {
+            $pdo->prepare(
+                'UPDATE alert_triggers SET label=?, sport=?, grade=?, signed=?, keywords=?,
+                    max_price=?, min_under_comp=?, require_comp=?, within_hours=? WHERE id=?'
+            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['keywords'],
+                        $data['max_price'], $data['min_under_comp'], $data['require_comp'], $data['within_hours'],
+                        (int)($_POST['id'] ?? 0)]);
+            flash('success', 'Trigger updated.');
         }
-    } elseif ($action === 'toggle' && $triggersReady) {
+        redirect('/superadmin/alerts.php');
+    }
+
+    if ($action === 'toggle' && $triggersReady) {
         $pdo->prepare('UPDATE alert_triggers SET active = 1 - active WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
     } elseif ($action === 'delete' && $triggersReady) {
         $pdo->prepare('DELETE FROM alert_triggers WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
@@ -80,33 +122,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('/superadmin/alerts.php');
 }
 
-$enabled = (string) setting('notify_enabled', '0') === '1';
+// ---- Load state --------------------------------------------------------
+$enabled  = (string) setting('notify_enabled', '0') === '1';
 $triggers = $triggersReady ? $pdo->query('SELECT * FROM alert_triggers ORDER BY active DESC, id DESC')->fetchAll() : [];
 $compCount = 0;
 try { $compCount = (int) $pdo->query('SELECT COUNT(*) FROM sold_comps')->fetchColumn(); } catch (\Throwable $e) {}
 
-/** Human summary of a trigger's conditions. */
-function trigger_summary(array $t, array $sports): string
-{
-    $p = [];
-    $p[] = $t['sport'] === 'all' ? 'Any sport' : ($sports[$t['sport']]['label'] ?? $t['sport']);
-    $p[] = $t['grade'] === 'any' ? 'any PSA grade' : ('PSA ' . $t['grade']);
-    if (!empty($t['signed']))                         $p[] = 'signed/auto';
-    if (!empty($t['keywords']))                       $p[] = '“' . $t['keywords'] . '”';
-    if ($t['max_price'] !== null)                     $p[] = 'under $' . rtrim(rtrim(number_format((float)$t['max_price'], 2), '0'), '.');
-    if (!empty($t['require_comp']) && ($t['min_under_comp'] === null || (float)$t['min_under_comp'] <= 0)) {
-        $p[] = 'under comp';
-    } elseif ($t['min_under_comp'] !== null && (float)$t['min_under_comp'] > 0) {
-        $p[] = '≥' . rtrim(rtrim(number_format((float)$t['min_under_comp'], 1), '0'), '.') . '% under comp';
-    }
-    if ($t['within_hours'] !== null)                  $p[] = 'ends ≤' . rtrim(rtrim(number_format((float)$t['within_hours'], 1), '0'), '.') . 'h';
-    return implode(' · ', $p);
+// Editing an existing trigger?
+$editing = null;
+if ($triggersReady && isset($_GET['edit'])) {
+    $stmt = $pdo->prepare('SELECT * FROM alert_triggers WHERE id = ?');
+    $stmt->execute([(int)$_GET['edit']]);
+    $editing = $stmt->fetch() ?: null;
 }
+// Field values for the form (from $editing or blank).
+$fv = fn (string $k, $d = '') => $editing !== null ? (($editing[$k] ?? '') === null ? '' : (string)$editing[$k]) : $d;
+$chk = fn (string $k) => $editing !== null && !empty($editing[$k]);
 
 layout_header('Deal Alerts', 'admin');
 ?>
 <h1>🔔 Deal Alert Triggers</h1>
-<p class="sub">Create as many triggers as you like — you'll get an email when a PSA auction matches <em>any</em> active one. e.g. “Signed PSA 10 under $25” or “Any PSA 10 under comp”. Runs on every scan / cron.</p>
+<p class="sub">Create as many triggers as you want — you're emailed when a PSA auction matches <em>any</em> active one. e.g. <em>“Baseball PSA 10, under $25, ending within 1 hour.”</em> Runs on every scan / cron.</p>
 
 <div class="stat-grid" style="margin-bottom:20px">
     <div class="stat"><div class="stat-num"><?= $enabled ? 'ON' : 'OFF' ?></div><div class="stat-label">Email alerts</div></div>
@@ -119,13 +155,13 @@ layout_header('Deal Alerts', 'admin');
 <?php endif; ?>
 
 <!-- Master email settings -->
-<form method="post" class="card" style="max-width:720px;margin-bottom:18px"><?= csrf_field() ?>
+<form method="post" class="card" style="max-width:760px;margin-bottom:22px"><?= csrf_field() ?>
     <input type="hidden" name="action" value="save_settings">
     <label class="checkbox"><input type="checkbox" name="notify_enabled" value="1" <?= $enabled ? 'checked' : '' ?>> Email alerts turned on</label>
-    <label>Send alerts to</label>
-    <input type="email" name="notify_email" value="<?= e((string)setting('notify_email','')) ?>" placeholder="you@example.com">
-    <label>“From” address (optional)</label>
-    <input name="notify_from" value="<?= e((string)setting('notify_from','')) ?>" placeholder="alerts@sportcard101.com">
+    <div class="row" style="margin-top:8px">
+        <div><label>Send alerts to</label><input type="email" name="notify_email" value="<?= e((string)setting('notify_email','')) ?>" placeholder="you@example.com"></div>
+        <div><label>“From” address (optional)</label><input name="notify_from" value="<?= e((string)setting('notify_from','')) ?>" placeholder="alerts@sportcard101.com"></div>
+    </div>
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Save settings</button>
         <a class="btn" href="/superadmin/alerts.php?test=1">✉️ Send test email</a>
@@ -145,6 +181,7 @@ layout_header('Deal Alerts', 'admin');
                     <div class="trigger-conds"><?= e(trigger_summary($t, $SPORTS)) ?></div>
                 </div>
                 <div class="trigger-actions">
+                    <a class="btn btn-sm" href="/superadmin/alerts.php?edit=<?= (int)$t['id'] ?>#form">Edit</a>
                     <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
                         <button class="btn btn-sm" type="submit"><?= $t['active'] ? 'Pause' : 'Resume' ?></button></form>
                     <form method="post" class="inline" onsubmit="return confirm('Delete this trigger?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
@@ -155,39 +192,55 @@ layout_header('Deal Alerts', 'admin');
     </div>
 <?php endif; ?>
 
-<!-- Add trigger -->
-<h2 style="margin-top:28px">Add a trigger</h2>
-<form method="post" class="card" style="max-width:720px"><?= csrf_field() ?>
-    <input type="hidden" name="action" value="add_trigger">
-    <label>Name</label>
-    <input name="label" placeholder="e.g. Signed PSA 10 under $25" required>
-    <div class="row">
+<!-- Add / edit trigger -->
+<h2 id="form" style="margin-top:28px"><?= $editing ? 'Edit trigger' : 'Add a trigger' ?></h2>
+<form method="post" class="card" style="max-width:760px"><?= csrf_field() ?>
+    <input type="hidden" name="action" value="<?= $editing ? 'update_trigger' : 'add_trigger' ?>">
+    <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int)$editing['id'] ?>"><?php endif; ?>
+
+    <label>Name <span class="sub">(optional — auto-named from the filters if blank)</span></label>
+    <input name="label" value="<?= e($fv('label')) ?>" placeholder="e.g. Baseball PSA 10 snipe">
+
+    <div class="row" style="margin-top:6px">
         <div>
             <label>Sport</label>
             <select name="sport">
-                <option value="all">Any sport</option>
-                <?php foreach ($SPORTS as $key => $meta): ?><option value="<?= e($key) ?>"><?= e($meta['emoji'].' '.$meta['label']) ?></option><?php endforeach; ?>
+                <option value="all"<?= $fv('sport','all')==='all'?' selected':'' ?>>Any sport</option>
+                <?php foreach ($SPORTS as $key => $meta): ?>
+                    <option value="<?= e($key) ?>"<?= $fv('sport')===$key?' selected':'' ?>><?= e($meta['emoji'].' '.$meta['label']) ?></option>
+                <?php endforeach; ?>
             </select>
         </div>
         <div>
             <label>PSA grade</label>
             <select name="grade">
-                <option value="any">Any grade</option>
-                <?php foreach ($GRADE_NUMS as $g): ?><option value="<?= e($g) ?>">PSA <?= e($g) ?></option><?php endforeach; ?>
+                <option value="any"<?= $fv('grade','any')==='any'?' selected':'' ?>>Any grade</option>
+                <?php foreach ($GRADE_NUMS as $g): ?>
+                    <option value="<?= e($g) ?>"<?= $fv('grade')===$g?' selected':'' ?>>PSA <?= e($g) ?></option>
+                <?php endforeach; ?>
             </select>
         </div>
     </div>
+
     <div class="row">
-        <div><label>Max price ($, optional)</label><input name="max_price" type="number" step="0.01" min="0" placeholder="e.g. 25"></div>
-        <div><label>Min % under comp (optional)</label><input name="min_under_comp" type="number" step="0.1" min="0" placeholder="e.g. 20"></div>
-        <div><label>Ends within (hours, optional)</label><input name="within_hours" type="number" step="0.5" min="0" placeholder="e.g. 8"></div>
+        <div><label>Max price ($)</label><input name="max_price" type="number" step="0.01" min="0" value="<?= e($fv('max_price')) ?>" placeholder="e.g. 25"></div>
+        <div><label>Min % under comp</label><input name="min_under_comp" type="number" step="0.1" min="0" value="<?= e($fv('min_under_comp')) ?>" placeholder="e.g. 20"></div>
+        <div><label>Ends within (hours)</label><input name="within_hours" type="number" step="0.5" min="0" value="<?= e($fv('within_hours')) ?>" placeholder="e.g. 1"></div>
     </div>
-    <label>Title keyword (optional)</label>
-    <input name="keywords" placeholder="e.g. Jordan, rookie, Topps Chrome">
-    <label class="checkbox"><input type="checkbox" name="signed" value="1"> Only signed / autograph cards</label>
-    <label class="checkbox"><input type="checkbox" name="require_comp" value="1"> Only when priced under its comp (needs comp history)</label>
-    <div style="margin-top:16px"><button class="btn btn-primary" type="submit">Add trigger</button></div>
-    <p class="field-help" style="margin-top:12px">Leave a field blank to ignore it. A trigger fires only when <em>all</em> its set conditions are met; you're alerted if an auction matches <em>any</em> active trigger. “Min % under comp” or “under comp” need sold-comp history for that card.</p>
+
+    <label>Title keyword</label>
+    <input name="keywords" value="<?= e($fv('keywords')) ?>" placeholder="e.g. Jordan, rookie, Topps Chrome">
+
+    <div style="margin-top:10px">
+        <label class="checkbox"><input type="checkbox" name="signed" value="1" <?= $chk('signed')?'checked':'' ?>> Only signed / autograph cards</label>
+        <label class="checkbox"><input type="checkbox" name="require_comp" value="1" <?= $chk('require_comp')?'checked':'' ?>> Only when priced under its comp (needs comp history)</label>
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" type="submit"><?= $editing ? 'Save changes' : 'Add trigger' ?></button>
+        <?php if ($editing): ?><a class="btn" href="/superadmin/alerts.php">Cancel</a><?php endif; ?>
+    </div>
+    <p class="field-help" style="margin-top:12px">Leave any field blank to ignore it. A trigger fires only when <em>all</em> its set conditions are met; you're alerted if an auction matches <em>any</em> active trigger. “% under comp” / “under comp” need sold-comp history for that card.</p>
 </form>
 <?php
 layout_footer();

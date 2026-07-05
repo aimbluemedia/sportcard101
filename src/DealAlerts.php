@@ -64,7 +64,6 @@ final class DealAlerts
         ], $rows);
         $stats = Comps::statsForCards($pdo, $cards);
 
-        $now = time();
         $matches = [];
         foreach ($rows as $r) {
             $key   = Comps::cardKey((string)$r['title']);
@@ -73,7 +72,7 @@ final class DealAlerts
             $under = ($comp && $comp['median'] > 0)
                 ? round((($comp['median'] - $price) / $comp['median']) * 100, 1)
                 : null;
-            $hoursLeft = (strtotime((string)$r['end_time']) - $now) / 3600;
+            $hoursLeft = \hours_until((string)$r['end_time']) ?? 0.0;
             $titleLc   = strtolower((string)$r['title']);
             $isSigned  = (bool) preg_match('/\b(auto|autograph|signed|signature)/i', $titleLc);
 

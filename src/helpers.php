@@ -189,6 +189,24 @@ function card_grade_nums(): array
     return ['10', '9.5', '9', '8.5', '8', '7'];
 }
 
+/**
+ * Hours from now until a UTC datetime string (negative if past). TZ-safe: both
+ * ends are computed in UTC so it doesn't depend on PHP's default timezone.
+ */
+function hours_until(?string $utc): ?float
+{
+    if (!$utc) {
+        return null;
+    }
+    try {
+        $end = new DateTime($utc, new DateTimeZone('UTC'));
+    } catch (\Exception $e) {
+        return null;
+    }
+    $now = new DateTime('now', new DateTimeZone('UTC'));
+    return ($end->getTimestamp() - $now->getTimestamp()) / 3600;
+}
+
 /** Human-friendly "time left" for an auction end time (UTC string). */
 function time_left(?string $endTimeUtc): string
 {
