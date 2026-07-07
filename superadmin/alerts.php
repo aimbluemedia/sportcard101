@@ -5,6 +5,7 @@ require __DIR__ . '/../src/bootstrap.php';
 require __DIR__ . '/../src/layout.php';
 
 use SportCard101\Auth;
+use SportCard101\DealAlerts;
 
 Auth::requireAdmin();
 
@@ -139,6 +140,12 @@ if ($triggersReady && isset($_GET['edit'])) {
 $fv = fn (string $k, $d = '') => $editing !== null ? (($editing[$k] ?? '') === null ? '' : (string)$editing[$k]) : $d;
 $chk = fn (string $k) => $editing !== null && !empty($editing[$k]);
 
+// Dry-run preview: what would alert right now (ignores the once-only rule).
+$preview = null;
+if (isset($_GET['preview'])) {
+    try { $preview = DealAlerts::evaluate($pdo, true); } catch (\Throwable $e) { $preview = null; }
+}
+
 layout_header('Deal Alerts', 'admin');
 ?>
 <h1>🔔 Deal Alert Triggers</h1>
@@ -165,8 +172,41 @@ layout_header('Deal Alerts', 'admin');
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Save settings</button>
         <a class="btn" href="/superadmin/alerts.php?test=1">✉️ Send test email</a>
+        <a class="btn" href="/superadmin/alerts.php?preview=1#preview">🔍 Preview matches (dry run)</a>
     </div>
 </form>
+
+<?php if ($preview !== null): ?>
+<div class="card" id="preview" style="max-width:900px;margin-bottom:22px">
+    <h2 style="margin-top:0">🔍 Dry-run preview</h2>
+    <p class="sub" style="margin-bottom:12px">Checked <strong><?= (int)$preview['candidates'] ?></strong> live PSA auction(s) against <strong><?= (int)$preview['triggers'] ?></strong> active trigger(s). <strong><?= count($preview['matches']) ?></strong> would alert (this preview ignores the once-per-auction rule).</p>
+    <?php if (!$preview['matches']): ?>
+        <div class="flash flash-info" style="margin:0">
+            Nothing matches right now. Common reasons:
+            <?php if ((int)$preview['triggers'] === 0): ?><strong>no active triggers</strong> — add one below.
+            <?php elseif ((int)$preview['candidates'] === 0): ?><strong>no live PSA auctions captured</strong> — go to <a href="/superadmin/auctions.php">Auctions</a> and run a Scan first.
+            <?php else: ?>your triggers' thresholds are tighter than any current auction (price / % under comp / hours), or “under comp” triggers have no comp history yet.<?php endif; ?>
+        </div>
+    <?php else: ?>
+        <table class="comps-table">
+            <thead><tr><th>Card</th><th class="num">Bid</th><th class="num">Comp</th><th class="num">Under</th><th>Ends in</th><th>Matched trigger(s)</th></tr></thead>
+            <tbody>
+                <?php foreach (array_slice($preview['matches'], 0, 30) as $m): ?>
+                    <tr>
+                        <td><?= e($m['ai_card'] ?: $m['title']) ?></td>
+                        <td class="num money"><?= money((float)$m['price'], $m['currency']) ?></td>
+                        <td class="num"><?= !empty($m['comp']) ? money((float)$m['comp']['median']) : '—' ?></td>
+                        <td class="num"><?= $m['under_pct'] !== null ? (int)$m['under_pct'] . '%' : '—' ?></td>
+                        <td><?= (int)max(0, round((float)$m['hours_left'])) ?>h</td>
+                        <td class="sub"><?= e(implode(', ', $m['triggers'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p class="sub" style="margin-top:10px">✅ Matching works. If these aren't arriving by email, the issue is email delivery (see note) — use “Send test email” to confirm.</p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <!-- Existing triggers -->
 <h2>Your triggers</h2>

@@ -29,17 +29,42 @@ final class DealAlerts
             return [];
         }
 
-        // Active triggers.
-        try {
-            $triggers = $pdo->query('SELECT * FROM alert_triggers WHERE active = 1')->fetchAll();
-        } catch (\Throwable $e) {
-            return []; // table not migrated yet
-        }
-        if (!$triggers) {
+        $matches = self::evaluate($pdo, false)['matches'];
+        if (!$matches) {
             return [];
         }
 
-        // Candidate auctions: active PSA auctions we haven't alerted on yet.
+        self::email($to, $matches);
+
+        $mark = $pdo->prepare('UPDATE listings SET notified = 1 WHERE id = ?');
+        foreach ($matches as $m) {
+            $mark->execute([(int)$m['id']]);
+        }
+
+        return $matches;
+    }
+
+    /**
+     * Read-only evaluation used by run() and the dry-run preview. Returns
+     * ['triggers'=>int active, 'candidates'=>int auctions checked, 'matches'=>[]].
+     * When $includeNotified is true, auctions already alerted are still checked
+     * (so a preview shows what would match regardless of de-dupe).
+     */
+    public static function evaluate(PDO $pdo, bool $includeNotified = false): array
+    {
+        $out = ['triggers' => 0, 'candidates' => 0, 'matches' => []];
+
+        try {
+            $triggers = $pdo->query('SELECT * FROM alert_triggers WHERE active = 1')->fetchAll();
+        } catch (\Throwable $e) {
+            return $out; // table not migrated yet
+        }
+        $out['triggers'] = count($triggers);
+        if (!$triggers) {
+            return $out;
+        }
+
+        $notCond = $includeNotified ? '' : ' AND l.notified = 0';
         $rows = $pdo->query(
             "SELECT l.id, l.ebay_item_id, l.title, l.ai_card, l.price, l.currency,
                     l.bid_count, l.end_time, l.item_url,
@@ -49,14 +74,13 @@ final class DealAlerts
              WHERE l.buying_option = 'AUCTION'
                AND l.end_time IS NOT NULL
                AND l.end_time > UTC_TIMESTAMP()
-               AND l.notified = 0
-               AND s.grade LIKE 'PSA %'"
+               AND s.grade LIKE 'PSA %'" . $notCond
         )->fetchAll();
+        $out['candidates'] = count($rows);
         if (!$rows) {
-            return [];
+            return $out;
         }
 
-        // Comp stats for every candidate card (batched).
         $cards = array_map(fn ($r) => [
             'sport' => $r['sport'],
             'grade' => $r['grade'],
@@ -91,25 +115,14 @@ final class DealAlerts
             }
         }
 
-        if (!$matches) {
-            return [];
-        }
-
-        // Best (most under comp, then cheapest) first.
         usort($matches, function ($a, $b) {
             $ua = $a['under_pct'] ?? -999;
             $ub = $b['under_pct'] ?? -999;
             return ($ub <=> $ua) ?: ($a['price'] <=> $b['price']);
         });
 
-        self::email($to, $matches);
-
-        $mark = $pdo->prepare('UPDATE listings SET notified = 1 WHERE id = ?');
-        foreach ($matches as $m) {
-            $mark->execute([(int)$m['id']]);
-        }
-
-        return $matches;
+        $out['matches'] = $matches;
+        return $out;
     }
 
     /** Does one auction satisfy every condition set on one trigger? */
