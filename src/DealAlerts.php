@@ -202,9 +202,6 @@ final class DealAlerts
         $lines[] = "— SportCard101 deal agent";
         $body = implode("\n", $lines);
 
-        $from = (string) \setting('notify_from', '') ?: 'alerts@sportcard101.com';
-        $headers = 'From: ' . $from . "\r\n" . "Content-Type: text/plain; charset=UTF-8\r\n";
-
-        @\mail($to, $subject, $body, $headers);
+        Mailer::send($to, $subject, $body);
     }
 }

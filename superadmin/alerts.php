@@ -6,6 +6,7 @@ require __DIR__ . '/../src/layout.php';
 
 use SportCard101\Auth;
 use SportCard101\DealAlerts;
+use SportCard101\Mailer;
 
 Auth::requireAdmin();
 
@@ -48,13 +49,12 @@ if (isset($_GET['test'])) {
     if ($to === '') {
         flash('error', 'Add an alert email address and Save settings first.');
     } else {
-        $from = (string) setting('notify_from', '') ?: 'alerts@sportcard101.com';
-        $ok = @mail($to, 'SportCard101: test deal alert',
-            "This is a test from your SportCard101 deal agent.\n\nIf you got this, email alerts work.\n",
-            'From: ' . $from . "\r\nContent-Type: text/plain; charset=UTF-8\r\n");
+        $ok = Mailer::send($to, 'SportCard101: test deal alert',
+            "This is a test from your SportCard101 deal agent.\n\nIf you got this, email alerts work.\n");
+        $how = (string) setting('smtp_host', '') !== '' ? 'via SMTP' : 'via PHP mail()';
         flash($ok ? 'success' : 'error', $ok
-            ? "Test email sent to {$to}. Check your inbox (and spam)."
-            : 'PHP mail() could not send — on Hostinger this can be blocked; consider SMTP.');
+            ? "Test email sent to {$to} {$how}. Check your inbox (and spam)."
+            : 'Send failed ' . $how . ': ' . (Mailer::$lastError ?? 'unknown error'));
     }
     redirect('/superadmin/alerts.php');
 }
@@ -67,8 +67,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save_settings') {
         $set = $pdo->prepare('INSERT INTO settings (skey, sval) VALUES (?, ?) ON DUPLICATE KEY UPDATE sval = VALUES(sval)');
         $set->execute(['notify_enabled', isset($_POST['notify_enabled']) ? '1' : '0']);
-        $set->execute(['notify_email', trim((string)($_POST['notify_email'] ?? ''))]);
-        $set->execute(['notify_from', trim((string)($_POST['notify_from'] ?? ''))]);
+        foreach (['notify_email', 'notify_from', 'notify_from_name', 'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user'] as $k) {
+            $set->execute([$k, trim((string)($_POST[$k] ?? ''))]);
+        }
+        // Password is secret — only overwrite when a new value is entered.
+        $pw = (string)($_POST['smtp_pass'] ?? '');
+        if ($pw !== '') {
+            $set->execute(['smtp_pass', $pw]);
+        }
         flash('success', 'Alert settings saved.');
         redirect('/superadmin/alerts.php');
     }
@@ -167,8 +173,29 @@ layout_header('Deal Alerts', 'admin');
     <label class="checkbox"><input type="checkbox" name="notify_enabled" value="1" <?= $enabled ? 'checked' : '' ?>> Email alerts turned on</label>
     <div class="row" style="margin-top:8px">
         <div><label>Send alerts to</label><input type="email" name="notify_email" value="<?= e((string)setting('notify_email','')) ?>" placeholder="you@example.com"></div>
-        <div><label>“From” address (optional)</label><input name="notify_from" value="<?= e((string)setting('notify_from','')) ?>" placeholder="alerts@sportcard101.com"></div>
+        <div><label>“From” address</label><input name="notify_from" value="<?= e((string)setting('notify_from','')) ?>" placeholder="alerts@sportcard101.com"></div>
+        <div><label>“From” name</label><input name="notify_from_name" value="<?= e((string)setting('notify_from_name','')) ?>" placeholder="SportCard101"></div>
     </div>
+
+    <hr style="margin:20px 0 6px">
+    <h3 style="margin:0 0 2px">📮 Email delivery (SMTP) <small style="color:var(--muted);font-weight:400">— fixes spam; recommended</small></h3>
+    <p class="field-help" style="margin-top:2px">Leave SMTP host blank to use basic PHP mail() (often spam-filtered). To send from your Hostinger mailbox, create it in hPanel → Emails, then enter its details here. The “From” address above should equal the SMTP user.</p>
+    <div class="row">
+        <div><label>SMTP host</label><input name="smtp_host" value="<?= e((string)setting('smtp_host','')) ?>" placeholder="smtp.hostinger.com"></div>
+        <div><label>Port</label><input name="smtp_port" value="<?= e((string)setting('smtp_port','587')) ?>" placeholder="587"></div>
+        <div><label>Security</label>
+            <select name="smtp_secure">
+                <?php $sec = (string)setting('smtp_secure','tls'); foreach (['tls'=>'STARTTLS (587)','ssl'=>'SSL/TLS (465)','none'=>'None'] as $v=>$lbl): ?>
+                    <option value="<?= e($v) ?>"<?= $sec===$v?' selected':'' ?>><?= e($lbl) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+    </div>
+    <div class="row">
+        <div><label>SMTP username (full email)</label><input name="smtp_user" value="<?= e((string)setting('smtp_user','')) ?>" placeholder="alerts@sportcard101.com"></div>
+        <div><label>SMTP password</label><input type="password" name="smtp_pass" autocomplete="new-password" placeholder="<?= (string)setting('smtp_pass','')!=='' ? '•••••••• (saved — blank keeps it)' : 'mailbox password' ?>"></div>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Save settings</button>
         <a class="btn" href="/superadmin/alerts.php?test=1">✉️ Send test email</a>
