@@ -227,6 +227,14 @@ form.stack input, form.stack select {
     background: #0a0d12; color: var(--text); font-weight: 600; font-size: .88rem; cursor: pointer; }
 .tb-check input { width: auto; margin: 0; }
 
+/* Collapsible email-settings panel */
+.email-settings > summary { cursor: pointer; font-weight: 700; font-size: 1.05rem; list-style: none; padding: 2px 0; }
+.email-settings > summary::-webkit-details-marker { display: none; }
+.email-settings > summary::before { content: "▸ "; color: var(--muted); }
+.email-settings[open] > summary::before { content: "▾ "; }
+.email-settings > summary .on { color: var(--green); }
+.email-settings > summary .off { color: var(--muted); }
+
 /* Comps — card grid */
 .comp-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
 .comp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; }

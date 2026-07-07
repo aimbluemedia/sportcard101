@@ -157,110 +157,12 @@ layout_header('Deal Alerts', 'admin');
 <h1>🔔 Deal Alert Triggers</h1>
 <p class="sub">Create as many triggers as you want — you're emailed when a PSA auction matches <em>any</em> active one. e.g. <em>“Baseball PSA 10, under $25, ending within 1 hour.”</em> Runs on every scan / cron.</p>
 
-<div class="stat-grid" style="margin-bottom:20px">
-    <div class="stat"><div class="stat-num"><?= $enabled ? 'ON' : 'OFF' ?></div><div class="stat-label">Email alerts</div></div>
-    <div class="stat"><div class="stat-num"><?= count(array_filter($triggers, fn ($t) => $t['active'])) ?></div><div class="stat-label">Active triggers</div></div>
-    <div class="stat"><div class="stat-num"><?= number_format($compCount) ?></div><div class="stat-label">Sold comps</div></div>
-</div>
-
 <?php if (!$triggersReady): ?>
     <div class="flash flash-error">The <code>alert_triggers</code> table isn't created yet. Run <code>migrations/2026_alert_triggers.sql</code> in phpMyAdmin, then reload.</div>
 <?php endif; ?>
 
-<!-- Master email settings -->
-<form method="post" class="card" style="max-width:760px;margin-bottom:22px"><?= csrf_field() ?>
-    <input type="hidden" name="action" value="save_settings">
-    <label class="checkbox"><input type="checkbox" name="notify_enabled" value="1" <?= $enabled ? 'checked' : '' ?>> Email alerts turned on</label>
-    <div class="row" style="margin-top:8px">
-        <div><label>Send alerts to</label><input type="email" name="notify_email" value="<?= e((string)setting('notify_email','')) ?>" placeholder="you@example.com"></div>
-        <div><label>“From” address</label><input name="notify_from" value="<?= e((string)setting('notify_from','')) ?>" placeholder="alerts@sportcard101.com"></div>
-        <div><label>“From” name</label><input name="notify_from_name" value="<?= e((string)setting('notify_from_name','')) ?>" placeholder="SportCard101"></div>
-    </div>
-
-    <hr style="margin:20px 0 6px">
-    <h3 style="margin:0 0 2px">📮 Email delivery (SMTP) <small style="color:var(--muted);font-weight:400">— fixes spam; recommended</small></h3>
-    <p class="field-help" style="margin-top:2px">Leave SMTP host blank to use basic PHP mail() (often spam-filtered). To send from your Hostinger mailbox, create it in hPanel → Emails, then enter its details here. The “From” address above should equal the SMTP user.</p>
-    <div class="row">
-        <div><label>SMTP host</label><input name="smtp_host" value="<?= e((string)setting('smtp_host','')) ?>" placeholder="smtp.hostinger.com"></div>
-        <div><label>Port</label><input name="smtp_port" value="<?= e((string)setting('smtp_port','587')) ?>" placeholder="587"></div>
-        <div><label>Security</label>
-            <select name="smtp_secure">
-                <?php $sec = (string)setting('smtp_secure','tls'); foreach (['tls'=>'STARTTLS (587)','ssl'=>'SSL/TLS (465)','none'=>'None'] as $v=>$lbl): ?>
-                    <option value="<?= e($v) ?>"<?= $sec===$v?' selected':'' ?>><?= e($lbl) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-    </div>
-    <div class="row">
-        <div><label>SMTP username (full email)</label><input name="smtp_user" value="<?= e((string)setting('smtp_user','')) ?>" placeholder="alerts@sportcard101.com"></div>
-        <div><label>SMTP password</label><input type="password" name="smtp_pass" autocomplete="new-password" placeholder="<?= (string)setting('smtp_pass','')!=='' ? '•••••••• (saved — blank keeps it)' : 'mailbox password' ?>"></div>
-    </div>
-
-    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-primary" type="submit">Save settings</button>
-        <a class="btn" href="/superadmin/alerts.php?test=1">✉️ Send test email</a>
-        <a class="btn" href="/superadmin/alerts.php?preview=1#preview">🔍 Preview matches (dry run)</a>
-    </div>
-</form>
-
-<?php if ($preview !== null): ?>
-<div class="card" id="preview" style="max-width:900px;margin-bottom:22px">
-    <h2 style="margin-top:0">🔍 Dry-run preview</h2>
-    <p class="sub" style="margin-bottom:12px">Checked <strong><?= (int)$preview['candidates'] ?></strong> live PSA auction(s) against <strong><?= (int)$preview['triggers'] ?></strong> active trigger(s). <strong><?= count($preview['matches']) ?></strong> would alert (this preview ignores the once-per-auction rule).</p>
-    <?php if (!$preview['matches']): ?>
-        <div class="flash flash-info" style="margin:0">
-            Nothing matches right now. Common reasons:
-            <?php if ((int)$preview['triggers'] === 0): ?><strong>no active triggers</strong> — add one below.
-            <?php elseif ((int)$preview['candidates'] === 0): ?><strong>no live PSA auctions captured</strong> — go to <a href="/superadmin/auctions.php">Auctions</a> and run a Scan first.
-            <?php else: ?>your triggers' thresholds are tighter than any current auction (price / % under comp / hours), or “under comp” triggers have no comp history yet.<?php endif; ?>
-        </div>
-    <?php else: ?>
-        <table class="comps-table">
-            <thead><tr><th>Card</th><th class="num">Bid</th><th class="num">Comp</th><th class="num">Under</th><th>Ends in</th><th>Matched trigger(s)</th></tr></thead>
-            <tbody>
-                <?php foreach (array_slice($preview['matches'], 0, 30) as $m): ?>
-                    <tr>
-                        <td><?= e($m['ai_card'] ?: $m['title']) ?></td>
-                        <td class="num money"><?= money((float)$m['price'], $m['currency']) ?></td>
-                        <td class="num"><?= !empty($m['comp']) ? money((float)$m['comp']['median']) : '—' ?></td>
-                        <td class="num"><?= $m['under_pct'] !== null ? (int)$m['under_pct'] . '%' : '—' ?></td>
-                        <td><?= (int)max(0, round((float)$m['hours_left'])) ?>h</td>
-                        <td class="sub"><?= e(implode(', ', $m['triggers'])) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
-        <p class="sub" style="margin-top:10px">✅ Matching works. If these aren't arriving by email, the issue is email delivery (see note) — use “Send test email” to confirm.</p>
-    <?php endif; ?>
-</div>
-<?php endif; ?>
-
-<!-- Existing triggers -->
-<h2>Your triggers</h2>
-<?php if (!$triggers): ?>
-    <div class="empty" style="padding:30px">No triggers yet — add one below.</div>
-<?php else: ?>
-    <div class="trigger-list">
-        <?php foreach ($triggers as $t): ?>
-            <div class="trigger<?= $t['active'] ? '' : ' trigger-off' ?>">
-                <div class="trigger-main">
-                    <div class="trigger-label"><?= e($t['label']) ?> <?php if (!$t['active']): ?><span class="sub">(paused)</span><?php endif; ?></div>
-                    <div class="trigger-conds"><?= e(trigger_summary($t, $SPORTS)) ?></div>
-                </div>
-                <div class="trigger-actions">
-                    <a class="btn btn-sm" href="/superadmin/alerts.php?edit=<?= (int)$t['id'] ?>#form">Edit</a>
-                    <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
-                        <button class="btn btn-sm" type="submit"><?= $t['active'] ? 'Pause' : 'Resume' ?></button></form>
-                    <form method="post" class="inline" onsubmit="return confirm('Delete this trigger?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
-                        <button class="btn btn-sm btn-danger" type="submit">Delete</button></form>
-                </div>
-            </div>
-        <?php endforeach; ?>
-    </div>
-<?php endif; ?>
-
-<!-- Add / edit trigger -->
-<h2 id="form" style="margin-top:28px"><?= $editing ? 'Edit trigger' : 'Add a trigger' ?></h2>
+<!-- Add / edit trigger (top) -->
+<h2 id="form" style="margin-top:0"><?= $editing ? 'Edit trigger' : 'Add a trigger' ?></h2>
 <form method="post" class="searchbar triggerbar"><?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update_trigger' : 'add_trigger' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int)$editing['id'] ?>"><?php endif; ?>
@@ -288,5 +190,107 @@ layout_header('Deal Alerts', 'admin');
     <?php if ($editing): ?><a class="btn btn-reset" href="/superadmin/alerts.php">Cancel</a><?php endif; ?>
 </form>
 <p class="field-help" style="max-width:900px">Leave any field blank to ignore it. A trigger fires only when <em>all</em> its set conditions are met; you're alerted if an auction matches <em>any</em> active trigger. “% under comp” / “Under comp” need sold-comp history for that card.</p>
+
+<!-- Your triggers -->
+<h2 style="margin-top:26px">Your triggers</h2>
+<?php if (!$triggers): ?>
+    <div class="empty" style="padding:30px">No triggers yet — add one above.</div>
+<?php else: ?>
+    <div class="trigger-list">
+        <?php foreach ($triggers as $t): ?>
+            <div class="trigger<?= $t['active'] ? '' : ' trigger-off' ?>">
+                <div class="trigger-main">
+                    <div class="trigger-label"><?= e($t['label']) ?> <?php if (!$t['active']): ?><span class="sub">(paused)</span><?php endif; ?></div>
+                    <div class="trigger-conds"><?= e(trigger_summary($t, $SPORTS)) ?></div>
+                </div>
+                <div class="trigger-actions">
+                    <a class="btn btn-sm" href="/superadmin/alerts.php?edit=<?= (int)$t['id'] ?>#form">Edit</a>
+                    <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+                        <button class="btn btn-sm" type="submit"><?= $t['active'] ? 'Pause' : 'Resume' ?></button></form>
+                    <form method="post" class="inline" onsubmit="return confirm('Delete this trigger?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$t['id'] ?>">
+                        <button class="btn btn-sm btn-danger" type="submit">Delete</button></form>
+                </div>
+            </div>
+        <?php endforeach; ?>
+    </div>
+<?php endif; ?>
+
+<?php if ($preview !== null): ?>
+<div class="card" id="preview" style="max-width:900px;margin-top:22px">
+    <h2 style="margin-top:0">🔍 Dry-run preview</h2>
+    <p class="sub" style="margin-bottom:12px">Checked <strong><?= (int)$preview['candidates'] ?></strong> live PSA auction(s) against <strong><?= (int)$preview['triggers'] ?></strong> active trigger(s). <strong><?= count($preview['matches']) ?></strong> would alert (this preview ignores the once-per-auction rule).</p>
+    <?php if (!$preview['matches']): ?>
+        <div class="flash flash-info" style="margin:0">
+            Nothing matches right now. Common reasons:
+            <?php if ((int)$preview['triggers'] === 0): ?><strong>no active triggers</strong> — add one above.
+            <?php elseif ((int)$preview['candidates'] === 0): ?><strong>no live PSA auctions captured</strong> — go to <a href="/superadmin/auctions.php">Auctions</a> and run a Scan first.
+            <?php else: ?>your triggers' thresholds are tighter than any current auction (price / % under comp / hours), or “under comp” triggers have no comp history yet.<?php endif; ?>
+        </div>
+    <?php else: ?>
+        <table class="comps-table">
+            <thead><tr><th>Card</th><th class="num">Bid</th><th class="num">Comp</th><th class="num">Under</th><th>Ends in</th><th>Matched trigger(s)</th></tr></thead>
+            <tbody>
+                <?php foreach (array_slice($preview['matches'], 0, 30) as $m): ?>
+                    <tr>
+                        <td><?= e($m['ai_card'] ?: $m['title']) ?></td>
+                        <td class="num money"><?= money((float)$m['price'], $m['currency']) ?></td>
+                        <td class="num"><?= !empty($m['comp']) ? money((float)$m['comp']['median']) : '—' ?></td>
+                        <td class="num"><?= $m['under_pct'] !== null ? (int)$m['under_pct'] . '%' : '—' ?></td>
+                        <td><?= (int)max(0, round((float)$m['hours_left'])) ?>h</td>
+                        <td class="sub"><?= e(implode(', ', $m['triggers'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <p class="sub" style="margin-top:10px">✅ Matching works. If these aren't arriving by email, the issue is email delivery — use “Send test email” below to confirm.</p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<!-- Email alerts settings (bottom, collapsible) -->
+<details class="card email-settings" style="max-width:760px;margin-top:26px"<?= (!$enabled || $preview !== null) ? ' open' : '' ?>>
+    <summary>📧 Email alerts: <strong class="<?= $enabled ? 'on' : 'off' ?>"><?= $enabled ? 'ON' : 'OFF' ?></strong> <span class="sub">— click to show / hide settings</span></summary>
+
+    <div class="stat-grid" style="margin:16px 0">
+        <div class="stat"><div class="stat-num"><?= $enabled ? 'ON' : 'OFF' ?></div><div class="stat-label">Email alerts</div></div>
+        <div class="stat"><div class="stat-num"><?= count(array_filter($triggers, fn ($t) => $t['active'])) ?></div><div class="stat-label">Active triggers</div></div>
+        <div class="stat"><div class="stat-num"><?= number_format($compCount) ?></div><div class="stat-label">Sold comps</div></div>
+    </div>
+
+    <form method="post"><?= csrf_field() ?>
+        <input type="hidden" name="action" value="save_settings">
+        <label class="checkbox"><input type="checkbox" name="notify_enabled" value="1" <?= $enabled ? 'checked' : '' ?>> Email alerts turned on</label>
+        <div class="row" style="margin-top:8px">
+            <div><label>Send alerts to</label><input type="email" name="notify_email" value="<?= e((string)setting('notify_email','')) ?>" placeholder="you@example.com"></div>
+            <div><label>“From” address</label><input name="notify_from" value="<?= e((string)setting('notify_from','')) ?>" placeholder="alerts@sportcard101.com"></div>
+            <div><label>“From” name</label><input name="notify_from_name" value="<?= e((string)setting('notify_from_name','')) ?>" placeholder="SportCard101"></div>
+        </div>
+
+        <hr style="margin:20px 0 6px">
+        <h3 style="margin:0 0 2px">📮 Email delivery (SMTP) <small style="color:var(--muted);font-weight:400">— fixes spam; recommended</small></h3>
+        <p class="field-help" style="margin-top:2px">Leave SMTP host blank to use basic PHP mail() (often spam-filtered). To send from your Hostinger mailbox, create it in hPanel → Emails, then enter its details here. The “From” address above should equal the SMTP user.</p>
+        <div class="row">
+            <div><label>SMTP host</label><input name="smtp_host" value="<?= e((string)setting('smtp_host','')) ?>" placeholder="smtp.hostinger.com"></div>
+            <div><label>Port</label><input name="smtp_port" value="<?= e((string)setting('smtp_port','587')) ?>" placeholder="587"></div>
+            <div><label>Security</label>
+                <select name="smtp_secure">
+                    <?php $sec = (string)setting('smtp_secure','tls'); foreach (['tls'=>'STARTTLS (587)','ssl'=>'SSL/TLS (465)','none'=>'None'] as $v=>$lbl): ?>
+                        <option value="<?= e($v) ?>"<?= $sec===$v?' selected':'' ?>><?= e($lbl) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div><label>SMTP username (full email)</label><input name="smtp_user" value="<?= e((string)setting('smtp_user','')) ?>" placeholder="alerts@sportcard101.com"></div>
+            <div><label>SMTP password</label><input type="password" name="smtp_pass" autocomplete="new-password" placeholder="<?= (string)setting('smtp_pass','')!=='' ? '•••••••• (saved — blank keeps it)' : 'mailbox password' ?>"></div>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary" type="submit">Save settings</button>
+            <a class="btn" href="/superadmin/alerts.php?test=1">✉️ Send test email</a>
+            <a class="btn" href="/superadmin/alerts.php?preview=1#preview">🔍 Preview matches (dry run)</a>
+        </div>
+    </form>
+</details>
 <?php
 layout_footer();
