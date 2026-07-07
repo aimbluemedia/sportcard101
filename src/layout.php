@@ -39,6 +39,10 @@ function nav_links(string $area): array
 function layout_header(string $title, string $area = 'public'): void
 {
     $home = $area === 'admin' ? '/superadmin/' : ($area === 'member' ? '/member/' : '/');
+    // Logged-in areas use a left sidebar; the public homepage keeps the top bar.
+    $sidebar = in_array($area, ['admin', 'member'], true);
+    $GLOBALS['__layout_sidebar'] = $sidebar;
+    $path = strtok((string)($_SERVER['REQUEST_URI'] ?? '/'), '?');
     ?><!doctype html>
 <html lang="en">
 <head>
@@ -47,22 +51,37 @@ function layout_header(string $title, string $area = 'public'): void
     <title><?= e($title) ?> · SportCard101</title>
     <link rel="stylesheet" href="/assets/style.css">
 </head>
-<body class="area-<?= e($area) ?>">
+<body class="area-<?= e($area) ?><?= $sidebar ? ' has-sidebar' : '' ?>">
+<?php if ($sidebar): ?>
+<div class="shell">
+    <aside class="sidebar">
+        <a class="brand" href="<?= e($home) ?>">🃏 Sport<span>Card101</span><?php if ($area === 'admin'): ?> <small>admin</small><?php endif; ?></a>
+        <nav class="side-nav">
+            <?php foreach (nav_links($area) as [$href, $label]):
+                $isActive = ($path === $href)
+                    || (in_array($href, ['/superadmin/', '/member/'], true) && in_array($path, [$href, $href . 'index.php'], true)); ?>
+                <a class="<?= $isActive ? 'active' : '' ?>" href="<?= e($href) ?>"><?= e($label) ?></a>
+            <?php endforeach; ?>
+        </nav>
+        <div class="side-foot">
+            <span class="user"><?= e(\SportCard101\Auth::username()) ?></span>
+            <a class="logout" href="/logout.php">Log out</a>
+        </div>
+    </aside>
+    <div class="content">
+    <main class="container">
+<?php else: ?>
 <header class="topbar">
-    <a class="brand" href="<?= e($home) ?>">🃏 Sport<span>Card101</span><?php if ($area === 'admin'): ?> <small>admin</small><?php endif; ?></a>
+    <a class="brand" href="<?= e($home) ?>">🃏 Sport<span>Card101</span></a>
     <nav>
         <?php foreach (nav_links($area) as [$href, $label]): ?>
             <a href="<?= e($href) ?>"><?= e($label) ?></a>
         <?php endforeach; ?>
-        <?php if ($area === 'public'): ?>
-            <a class="btn btn-primary btn-sm" href="/signup.php">Join free</a>
-        <?php else: ?>
-            <span class="user"><?= e(\SportCard101\Auth::username()) ?></span>
-            <a class="logout" href="/logout.php">Log out</a>
-        <?php endif; ?>
+        <a class="btn btn-primary btn-sm" href="/signup.php">Join free</a>
     </nav>
 </header>
 <main class="container">
+<?php endif; ?>
 <?php
     if (!empty($_SESSION['flash'])) {
         foreach ($_SESSION['flash'] as $f) {
@@ -74,9 +93,14 @@ function layout_header(string $title, string $area = 'public'): void
 
 function layout_footer(): void
 {
+    $sidebar = $GLOBALS['__layout_sidebar'] ?? false;
     ?>
 </main>
 <footer class="foot">SportCard101 — learn the hobby, find the deals · <a href="/">sportcard101.com</a></footer>
+<?php if ($sidebar): ?>
+    </div><!-- .content -->
+</div><!-- .shell -->
+<?php endif; ?>
 </body>
 </html>
 <?php

@@ -39,6 +39,29 @@ a:hover { text-decoration: underline; }
 
 .container { max-width: 1080px; margin: 0 auto; padding: 28px 24px 60px; }
 
+/* Left sidebar layout (logged-in areas) */
+.shell { display: flex; align-items: stretch; min-height: 100vh; }
+.sidebar { width: 210px; flex: none; background: var(--panel); border-right: 1px solid var(--border);
+    padding: 18px 12px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+.sidebar .brand { font-size: 1.15rem; margin: 4px 6px 16px; display: block; }
+.sidebar .brand small { color: var(--muted); font-weight: 600; font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.side-nav a { color: var(--muted); font-weight: 600; padding: 9px 12px; border-radius: 8px; font-size: .92rem; }
+.side-nav a:hover { color: var(--text); background: var(--panel-2); text-decoration: none; }
+.side-nav a.active { color: var(--accent); background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+.side-foot { margin-top: auto; padding: 14px 8px 4px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.side-foot .user { color: var(--accent); font-weight: 700; font-size: .9rem; }
+.side-foot .logout { color: var(--muted); font-size: .85rem; }
+.content { flex: 1; min-width: 0; }
+.has-sidebar .content .container { max-width: 1280px; }
+
+@media (max-width: 760px) {
+    .shell { flex-direction: column; }
+    .sidebar { width: auto; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); }
+    .side-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+    .side-foot { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 12px; }
+}
+
 h1 { font-size: 1.7rem; margin: 0 0 4px; }
 h2 { font-size: 1.2rem; margin: 28px 0 12px; }
 .sub { color: var(--muted); margin: 0 0 24px; }
