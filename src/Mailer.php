@@ -48,17 +48,20 @@ final class Mailer
         if ($html === null) {
             return ["Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n", $body];
         }
-        $crlf     = fn (string $s): string => preg_replace('/\r\n?|\n/', "\r\n", $s) ?? $s;
+        // Quoted-printable keeps every line under the 998-byte SMTP limit
+        // (the generated HTML is otherwise one long line) and makes the
+        // non-ASCII text (·, —, accented names) 7-bit safe.
+        $qp       = fn (string $s): string => quoted_printable_encode(preg_replace('/\r\n?|\n/', "\r\n", $s) ?? $s);
         $boundary = 'sc101-' . bin2hex(random_bytes(12));
         $mixed =
             "--{$boundary}\r\n" .
             "Content-Type: text/plain; charset=UTF-8\r\n" .
-            "Content-Transfer-Encoding: 8bit\r\n\r\n" .
-            $crlf($body) . "\r\n\r\n" .
+            "Content-Transfer-Encoding: quoted-printable\r\n\r\n" .
+            $qp($body) . "\r\n\r\n" .
             "--{$boundary}\r\n" .
             "Content-Type: text/html; charset=UTF-8\r\n" .
-            "Content-Transfer-Encoding: 8bit\r\n\r\n" .
-            $crlf($html) . "\r\n\r\n" .
+            "Content-Transfer-Encoding: quoted-printable\r\n\r\n" .
+            $qp($html) . "\r\n\r\n" .
             "--{$boundary}--";
         return ["Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n", $mixed];
     }
