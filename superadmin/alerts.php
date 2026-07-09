@@ -125,6 +125,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete' && $triggersReady) {
         $pdo->prepare('DELETE FROM alert_triggers WHERE id = ?')->execute([(int)($_POST['id'] ?? 0)]);
         flash('success', 'Trigger deleted.');
+    } elseif ($action === 'run_now') {
+        // Force the real alert send on demand (same as a scan/cron would do).
+        if ((string) setting('notify_enabled', '0') !== '1') {
+            flash('error', '“Email alerts turned on” is off — enable it and Save first.');
+        } elseif (trim((string) setting('notify_email', '')) === '') {
+            flash('error', 'Set an alert email address and Save first.');
+        } else {
+            $all   = DealAlerts::evaluate($pdo, true)['matches'];
+            $fresh = array_filter($all, fn ($m) => (int)($m['notified'] ?? 0) === 0);
+            $sent  = DealAlerts::run($pdo);
+            $n = count($sent);
+            $already = count($all) - count($fresh);
+            if ($n > 0) {
+                flash('success', "Sent {$n} alert email" . ($n === 1 ? '' : 's') . " now." . ($already ? " ({$already} more matched but were already alerted.)" : ''));
+            } elseif ($already > 0) {
+                flash('info', "0 sent — all " . count($all) . " matching auctions were already alerted (once-only). Use “Reset alerted flags” to resend.");
+            } else {
+                flash('info', '0 sent — nothing matches your triggers right now. Use “Preview matches” to see why.');
+            }
+        }
+    } elseif ($action === 'reset_alerted') {
+        $done = $pdo->exec("UPDATE listings SET notified = 0 WHERE buying_option = 'AUCTION' AND end_time > UTC_TIMESTAMP()");
+        flash('success', "Reset alerted status on {$done} live auction(s). The next run (or “Run alerts now”) can resend them.");
     }
     redirect('/superadmin/alerts.php');
 }
@@ -291,6 +314,15 @@ layout_header('Deal Alerts', 'admin');
             <a class="btn" href="/superadmin/alerts.php?preview=1#preview">🔍 Preview matches (dry run)</a>
         </div>
     </form>
+
+    <hr style="margin:18px 0 12px">
+    <p class="field-help" style="margin-top:0">Alerts normally send automatically on each scan / cron. Use these to send right now or to clear the once-only flag so already-alerted auctions can resend.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="run_now">
+            <button class="btn btn-scan" type="submit">▶ Run alerts now</button></form>
+        <form method="post" class="inline" onsubmit="return confirm('Reset the alerted flag on all live auctions so they can be emailed again?')"><?= csrf_field() ?><input type="hidden" name="action" value="reset_alerted">
+            <button class="btn" type="submit">↺ Reset alerted flags</button></form>
+    </div>
 </details>
 <?php
 layout_footer();

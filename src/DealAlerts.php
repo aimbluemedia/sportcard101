@@ -67,7 +67,7 @@ final class DealAlerts
         $notCond = $includeNotified ? '' : ' AND l.notified = 0';
         $rows = $pdo->query(
             "SELECT l.id, l.ebay_item_id, l.title, l.ai_card, l.price, l.currency,
-                    l.bid_count, l.end_time, l.item_url,
+                    l.bid_count, l.end_time, l.item_url, l.notified,
                     s.keywords AS sport, s.grade AS grade
              FROM listings l
              JOIN searches s ON s.id = l.search_id
@@ -111,6 +111,7 @@ final class DealAlerts
                 $r['under_pct']  = $under;
                 $r['hours_left'] = $hoursLeft;
                 $r['triggers']   = $fired;
+                $r['notified']   = (int)($r['notified'] ?? 0);
                 $matches[] = $r;
             }
         }
