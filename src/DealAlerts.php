@@ -175,34 +175,114 @@ final class DealAlerts
         return true;
     }
 
-    /** Send a plain-text digest of matched deals. */
+    /** Send the deal digest (HTML with a plain-text fallback). */
     private static function email(string $to, array $matches): void
     {
         $n = count($matches);
         $subject = "SportCard101: {$n} deal alert" . ($n === 1 ? '' : 's');
+        Mailer::send($to, $subject, self::emailText($matches), self::emailHtml($matches));
+    }
 
+    /** Normalise one match into the display fields both email formats use. */
+    private static function displayFields(array $m): array
+    {
+        $hrs = (int) max(0, round((float)$m['hours_left']));
+        $comp = null;
+        if (!empty($m['comp']) && $m['under_pct'] !== null) {
+            $comp = [
+                'median' => '$' . number_format((float)$m['comp']['median'], 2),
+                'count'  => (int) $m['comp']['count'],
+                'under'  => (int) round((float)$m['under_pct']),
+            ];
+        }
+        return [
+            'card'  => (string) ($m['ai_card'] ?: $m['title']),
+            'price' => '$' . number_format((float)$m['price'], 2),
+            'bids'  => (int) $m['bid_count'],
+            'ends'  => $hrs >= 48 ? '~' . (int) round($hrs / 24) . ' days' : "~{$hrs}h",
+            'url'   => \function_exists('epn_link') ? \epn_link((string)$m['item_url']) : (string)$m['item_url'],
+            'comp'  => $comp,
+            'trig'  => implode(', ', $m['triggers']),
+        ];
+    }
+
+    /** Plain-text fallback shown by clients that don't render HTML. */
+    public static function emailText(array $matches): string
+    {
+        $n = count($matches);
         $lines = ["{$n} auction" . ($n === 1 ? '' : 's') . " matched your triggers:\n"];
         foreach ($matches as $m) {
-            $card  = $m['ai_card'] ?: $m['title'];
-            $price = '$' . number_format((float)$m['price'], 2);
-            $bids  = (int) $m['bid_count'];
-            $hrs   = (int) max(0, round((float)$m['hours_left']));
-            $url   = \function_exists('epn_link') ? \epn_link((string)$m['item_url']) : (string)$m['item_url'];
-
-            $lines[] = "• {$card}";
-            $lines[] = "  Current bid {$price} · {$bids} bids · ends in ~{$hrs}h";
-            if (!empty($m['comp']) && $m['under_pct'] !== null) {
-                $median = '$' . number_format((float)$m['comp']['median'], 2);
-                $under  = (int) round((float)$m['under_pct']);
-                $lines[] = "  {$under}% under comp median {$median} ({$m['comp']['count']} sales)";
+            $d = self::displayFields($m);
+            $lines[] = "• {$d['card']}";
+            $lines[] = "  Current bid {$d['price']} · {$d['bids']} bid" . ($d['bids'] === 1 ? '' : 's') . " · ends in {$d['ends']}";
+            if ($d['comp']) {
+                $lines[] = $d['comp']['under'] > 0
+                    ? "  {$d['comp']['under']}% under comp median {$d['comp']['median']} ({$d['comp']['count']} sales)"
+                    : "  Comp median {$d['comp']['median']} ({$d['comp']['count']} sales)";
             }
-            $lines[] = "  Matched: " . implode(', ', $m['triggers']);
-            $lines[] = "  {$url}";
+            $lines[] = "  Matched: {$d['trig']}";
+            $lines[] = "  View on eBay: {$d['url']}";
             $lines[] = "";
         }
         $lines[] = "— SportCard101 deal agent";
-        $body = implode("\n", $lines);
+        return implode("\n", $lines);
+    }
 
-        Mailer::send($to, $subject, $body);
+    /** Rich HTML digest — inline styles and table layout for email clients. */
+    public static function emailHtml(array $matches): string
+    {
+        $n    = count($matches);
+        $font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+        $intro = $n === 1
+            ? '1 auction matched your alert triggers.'
+            : "{$n} auctions matched your alert triggers, best value first.";
+        $preheader = \e($intro . ($matches ? ' Top match: ' . (string)($matches[0]['ai_card'] ?: $matches[0]['title']) : ''));
+
+        $rows = '';
+        foreach ($matches as $m) {
+            $d = self::displayFields($m);
+            $compLine = '';
+            if ($d['comp']) {
+                $compLine = $d['comp']['under'] > 0
+                    ? '<p style="margin:8px 0 0;font-size:13px;line-height:1.4;font-weight:600;color:#1d7d46;' . $font . '">'
+                        . \e("{$d['comp']['under']}% under comp") . ' <span style="font-weight:400;color:#6e6e73">&middot; median '
+                        . \e($d['comp']['median']) . ' &middot; ' . $d['comp']['count'] . ' sales</span></p>'
+                    : '<p style="margin:8px 0 0;font-size:13px;line-height:1.4;color:#6e6e73;' . $font . '">Comp median '
+                        . \e($d['comp']['median']) . ' &middot; ' . $d['comp']['count'] . ' sales</p>';
+            }
+            $rows .=
+                '<tr><td style="padding:22px 28px;border-top:1px solid #e8e8ed">'
+                . '<p style="margin:0;font-size:16px;line-height:1.4;font-weight:600;color:#1d1d1f;' . $font . '">' . \e($d['card']) . '</p>'
+                . '<p style="margin:6px 0 0;font-size:13px;line-height:1.4;color:#6e6e73;' . $font . '">Current bid '
+                . '<span style="font-weight:600;color:#1d1d1f">' . \e($d['price']) . '</span>'
+                . ' &middot; ' . $d['bids'] . ' bid' . ($d['bids'] === 1 ? '' : 's')
+                . ' &middot; ends in ' . \e($d['ends']) . '</p>'
+                . $compLine
+                . '<p style="margin:8px 0 0;font-size:12px;line-height:1.4;color:#86868b;' . $font . '">Matched: ' . \e($d['trig']) . '</p>'
+                . '<p style="margin:16px 0 0"><a href="' . \e($d['url']) . '" '
+                . 'style="display:inline-block;background:#0071e3;color:#ffffff;font-size:13px;font-weight:600;line-height:1;'
+                . 'padding:10px 20px;border-radius:980px;text-decoration:none;' . $font . '">View on eBay</a></p>'
+                . '</td></tr>';
+        }
+
+        return
+            '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all">' . $preheader . '</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7">'
+            . '<tr><td align="center" style="padding:32px 16px">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" '
+            . 'style="width:600px;max-width:100%;background:#ffffff;border-radius:18px">'
+            . '<tr><td style="padding:30px 28px 6px">'
+            . '<p style="margin:0;font-size:21px;font-weight:700;letter-spacing:-0.3px;color:#1d1d1f;' . $font . '">SportCard101</p>'
+            . '<p style="margin:3px 0 0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#86868b;' . $font . '">Deal Alerts</p>'
+            . '</td></tr>'
+            . '<tr><td style="padding:14px 28px 22px">'
+            . '<p style="margin:0;font-size:14px;line-height:1.5;color:#1d1d1f;' . $font . '">' . \e($intro) . '</p>'
+            . '</td></tr>'
+            . $rows
+            . '</table>'
+            . '<p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#86868b;' . $font . '">'
+            . 'You&rsquo;re receiving this because deal alerts are enabled in your SportCard101 dashboard.<br>'
+            . '&copy; ' . date('Y') . ' SportCard101 &middot; Deal Agent</p>'
+            . '</td></tr></table>';
     }
 }

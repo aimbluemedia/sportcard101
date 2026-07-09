@@ -49,8 +49,21 @@ if (isset($_GET['test'])) {
     if ($to === '') {
         flash('error', 'Add an alert email address and Save settings first.');
     } else {
-        $ok = Mailer::send($to, 'SportCard101: test deal alert',
-            "This is a test from your SportCard101 deal agent.\n\nIf you got this, email alerts work.\n");
+        // Sample deal so the test shows the real alert design end-to-end.
+        $sample = [[
+            'ai_card'    => '2018 Panini Prizm Luka Dončić Rookie #280 PSA 10',
+            'title'      => '2018 Panini Prizm Luka Doncic Rookie #280 PSA 10',
+            'price'      => 449.00,
+            'currency'   => 'USD',
+            'bid_count'  => 12,
+            'hours_left' => 3.4,
+            'item_url'   => 'https://www.ebay.com/itm/000000000000',
+            'comp'       => ['median' => 560.00, 'count' => 9],
+            'under_pct'  => 19.8,
+            'triggers'   => ['Sample trigger — this is a test email'],
+        ]];
+        $ok = Mailer::send($to, 'SportCard101: test deal alert (sample data)',
+            DealAlerts::emailText($sample), DealAlerts::emailHtml($sample));
         $how = (string) setting('smtp_host', '') !== '' ? 'via SMTP' : 'via PHP mail()';
         flash($ok ? 'success' : 'error', $ok
             ? "Test email sent to {$to} {$how}. Check your inbox (and spam)."
