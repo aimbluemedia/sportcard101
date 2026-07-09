@@ -81,6 +81,36 @@ layout_header('Settings', 'admin');
 <h1>Settings</h1>
 <p class="sub">Site copy, eBay Partner (affiliate) keys, and eBay Developer (Browse) keys for the AI deal scanner.</p>
 
+<?php
+// Cron heartbeat — cron.php stamps these on every run (expected every 30 min).
+$cronLastRun = setting('cron_last_run');
+$cronStatus  = setting('cron_last_status', '');
+if ($cronLastRun) {
+    $ageMin  = (int) floor((time() - strtotime($cronLastRun)) / 60);
+    $late    = $ageMin > 40; // 30-min schedule + grace
+    $color   = $late ? '#e05555' : '#3aa66a';
+    $verdict = $late
+        ? "⚠ Last run {$ageMin} min ago — expected every 30 min. Check the cron job on your host."
+        : "✓ On schedule — last run {$ageMin} min ago (fires every 30 min).";
+} else {
+    $color   = '#e0a935';
+    $verdict = '⚠ Cron has never run. Set up the cron job on your host (see command below).';
+}
+?>
+<div class="card" style="max-width:780px;border-left:4px solid <?= $color ?>">
+    <strong>Automatic scanning (cron)</strong>
+    <p style="margin:6px 0 0"><?= e($verdict) ?></p>
+    <?php if ($cronLastRun): ?>
+        <p style="margin:6px 0 0;color:var(--muted)">
+            Last run: <?= e(date('M j, g:ia', strtotime($cronLastRun))) ?>
+            <?php if ($cronStatus): ?> · <?= e($cronStatus) ?><?php endif; ?>
+        </p>
+    <?php endif; ?>
+    <p style="margin:6px 0 0;color:var(--muted)">Cron command (every 30 min):
+        <code>*/30 * * * * curl -s "https://sportcard101.com/cron.php?key=YOUR_SECRET" &gt;/dev/null 2&gt;&amp;1</code>
+    </p>
+</div>
+
 <form method="post" class="card" style="max-width:780px"><?= csrf_field() ?>
 
     <h2 style="margin-top:0">Site</h2>
