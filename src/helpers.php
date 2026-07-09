@@ -83,6 +83,14 @@ function setting(string $key, ?string $default = null): ?string
     return $cache[$key] ?? $default;
 }
 
+/** Write a site setting (upsert into the key/value table). */
+function set_setting(string $key, string $val): void
+{
+    global $pdo;
+    $pdo->prepare('INSERT INTO settings (skey, sval) VALUES (?, ?) ON DUPLICATE KEY UPDATE sval = VALUES(sval)')
+        ->execute([$key, $val]);
+}
+
 /**
  * Build the eBay client config, preferring values saved in the admin Settings
  * (DB) and falling back to config.php. Lets the superadmin manage keys in the UI.

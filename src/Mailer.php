@@ -15,7 +15,11 @@ final class Mailer
 {
     public static ?string $lastError = null;
 
-    public static function send(string $to, string $subject, string $body): bool
+    /**
+     * Send an email. Pass $html to send a multipart/alternative message where
+     * $body is the plain-text fallback and $html is the rich version.
+     */
+    public static function send(string $to, string $subject, string $body, ?string $html = null): bool
     {
         self::$lastError = null;
         $from     = trim((string) \setting('notify_from', '')) ?: 'alerts@sportcard101.com';
@@ -23,30 +27,57 @@ final class Mailer
         $host     = trim((string) \setting('smtp_host', ''));
 
         if ($host === '') {
-            return self::viaMail($to, $subject, $body, $from, $fromName);
+            return self::viaMail($to, $subject, $body, $html, $from, $fromName);
         }
         $port   = (int) (\setting('smtp_port', '587') ?: 587);
         $secure = strtolower((string) \setting('smtp_secure', 'tls'));
         $user   = (string) \setting('smtp_user', '');
         $pass   = (string) \setting('smtp_pass', '');
 
-        return self::viaSmtp($host, $port, $secure, $user, $pass, $from, $fromName, $to, $subject, $body);
+        return self::viaSmtp($host, $port, $secure, $user, $pass, $from, $fromName, $to, $subject, $body, $html);
     }
 
-    private static function viaMail(string $to, string $subject, string $body, string $from, string $fromName): bool
+    /**
+     * Content headers + message body: plain text only, or multipart/alternative
+     * (text fallback + HTML) when an HTML version is provided.
+     *
+     * @return array{0:string,1:string} [content headers (CRLF-terminated), body]
+     */
+    private static function mimeParts(string $body, ?string $html): array
     {
+        if ($html === null) {
+            return ["Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n", $body];
+        }
+        $crlf     = fn (string $s): string => preg_replace('/\r\n?|\n/', "\r\n", $s) ?? $s;
+        $boundary = 'sc101-' . bin2hex(random_bytes(12));
+        $mixed =
+            "--{$boundary}\r\n" .
+            "Content-Type: text/plain; charset=UTF-8\r\n" .
+            "Content-Transfer-Encoding: 8bit\r\n\r\n" .
+            $crlf($body) . "\r\n\r\n" .
+            "--{$boundary}\r\n" .
+            "Content-Type: text/html; charset=UTF-8\r\n" .
+            "Content-Transfer-Encoding: 8bit\r\n\r\n" .
+            $crlf($html) . "\r\n\r\n" .
+            "--{$boundary}--";
+        return ["Content-Type: multipart/alternative; boundary=\"{$boundary}\"\r\n", $mixed];
+    }
+
+    private static function viaMail(string $to, string $subject, string $body, ?string $html, string $from, string $fromName): bool
+    {
+        [$typeHeaders, $payload] = self::mimeParts($body, $html);
         $headers = 'From: ' . self::encHeader($fromName) . ' <' . $from . ">\r\n"
                  . 'Reply-To: ' . $from . "\r\n"
                  . "MIME-Version: 1.0\r\n"
-                 . "Content-Type: text/plain; charset=UTF-8\r\n";
-        $ok = @\mail($to, $subject, $body, $headers);
+                 . $typeHeaders;
+        $ok = @\mail($to, $subject, $payload, $headers);
         if (!$ok) {
             self::$lastError = 'PHP mail() returned false (host may block it — configure SMTP).';
         }
         return $ok;
     }
 
-    private static function viaSmtp(string $host, int $port, string $secure, string $user, string $pass, string $from, string $fromName, string $to, string $subject, string $body): bool
+    private static function viaSmtp(string $host, int $port, string $secure, string $user, string $pass, string $from, string $fromName, string $to, string $subject, string $body, ?string $html = null): bool
     {
         $transport = $secure === 'ssl' ? "ssl://{$host}:{$port}" : "{$host}:{$port}";
         $ctx = stream_context_create(['ssl' => ['verify_peer' => true, 'verify_peer_name' => true, 'SNI_enabled' => true]]);
@@ -105,6 +136,7 @@ final class Mailer
 
         $date  = gmdate('D, d M Y H:i:s') . ' +0000';
         $msgid = '<' . bin2hex(random_bytes(10)) . '@' . $ehlo . '>';
+        [$typeHeaders, $mimeBody] = self::mimeParts($body, $html);
         $headers =
             "Date: {$date}\r\n" .
             'From: ' . self::encHeader($fromName) . " <{$from}>\r\n" .
@@ -112,9 +144,8 @@ final class Mailer
             'Subject: ' . self::encHeader($subject) . "\r\n" .
             "Message-ID: {$msgid}\r\n" .
             "MIME-Version: 1.0\r\n" .
-            "Content-Type: text/plain; charset=UTF-8\r\n" .
-            "Content-Transfer-Encoding: 8bit\r\n";
-        $payload = $headers . "\r\n" . self::dotStuff($body) . "\r\n.\r\n";
+            $typeHeaders;
+        $payload = $headers . "\r\n" . self::dotStuff($mimeBody) . "\r\n.\r\n";
         fwrite($fp, $payload);
         if (!$ok($read(), 250)) { self::$lastError = 'message not accepted'; fclose($fp); return false; }
 

@@ -60,6 +60,13 @@ try {
     $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions
 
     $secs = round(microtime(true) - $started, 1);
+
+    // Heartbeat — lets the superadmin Settings page confirm cron is firing.
+    $summary = sprintf('OK — %d deals flagged, %d sold comps, %d alerts sent, %ss (%s)',
+        count($newDeals), $recorded, count($alerts), $secs, $ebay->isMock() ? 'mock' : 'live');
+    set_setting('cron_last_run', date('Y-m-d H:i:s'));
+    set_setting('cron_last_status', $summary);
+
     echo "OK\n";
     echo "new deals flagged: " . count($newDeals) . "\n";
     echo "new sold comps:    {$recorded}\n";
@@ -67,6 +74,8 @@ try {
     echo "ebay mode:         " . ($ebay->isMock() ? 'mock (no keyset)' : 'live') . "\n";
     echo "took:              {$secs}s\n";
 } catch (\Throwable $e) {
+    set_setting('cron_last_run', date('Y-m-d H:i:s'));
+    set_setting('cron_last_status', 'ERROR — ' . $e->getMessage());
     http_response_code(500);
     echo "ERROR: " . $e->getMessage() . "\n";
 }
