@@ -73,6 +73,16 @@ $plan   = $ready ? Playbook::load($pdo) : null;
 $sells  = $ready ? Playbook::sellActions($pdo) : [];
 $trades = $ready ? $pdo->query('SELECT * FROM trades ORDER BY bought_at DESC, id DESC LIMIT 200')->fetchAll() : [];
 $cfg    = Playbook::config();
+$score  = $ready ? Playbook::scorecard($pdo) : null;
+$gradedRows = [];
+if ($ready) {
+    $gradedRows = $pdo->query(
+        "SELECT pt.card, pt.max_bid, pt.est_resale, pt.est_net, pt.final_price, pt.would_have_won, dp.plan_date
+         FROM plan_targets pt JOIN daily_plans dp ON dp.id = pt.plan_id
+         WHERE pt.kind = 'BUY' AND pt.would_have_won IS NOT NULL
+         ORDER BY pt.graded_at DESC LIMIT 20"
+    )->fetchAll();
+}
 
 // Realised P&L: sold trades, estimating fees when not recorded.
 $realised = 0.0; $soldCount = 0;
@@ -203,6 +213,42 @@ layout_header('Daily Plan', 'admin');
     </table></div>
 </div>
 <?php endif; ?>
+
+<div class="card" style="margin-bottom:16px;border-left:4px solid <?= $score && $score['ready'] ? '#3aa66a' : '#e0a935' ?>">
+    <h2 style="margin-top:0">🎓 Paper-trading scorecard</h2>
+    <?php if (!$score): ?>
+        <p style="margin:0;color:var(--muted)">No graded picks yet. Every buy target is graded automatically once its auction closes
+        (would our max bid have won? what would the flip have netted?). Give it a few days of plans — the record builds itself.</p>
+    <?php else: ?>
+        <p style="margin:0 0 10px;font-size:15px">
+            Last <?= (int)$score['days'] ?> days: <strong><?= (int)$score['won'] ?> of <?= (int)$score['picks'] ?></strong> picks would have
+            won at our max bid (<strong><?= (int)$score['win_rate'] ?>%</strong>)
+            · hypothetical net <strong style="color:<?= $score['paper_net'] >= 0 ? '#1d7d46' : '#e05555' ?>">
+            $<?= number_format((float)$score['paper_net'], 2) ?></strong></p>
+        <p style="margin:0;color:var(--muted)">Real-money gate (10+ graded picks · 55%+ win rate · positive net):
+            <strong><?= $score['ready'] ? '✅ MET — a small live bankroll is justified' : '⏳ not yet — keep it on paper' ?></strong></p>
+    <?php endif; ?>
+
+    <?php if ($gradedRows): ?>
+    <div style="overflow-x:auto;margin-top:14px"><table>
+        <tr><th>Plan</th><th>Card</th><th>Our max bid</th><th>Actually closed at</th><th>Result</th><th>Paper net</th></tr>
+        <?php foreach ($gradedRows as $g):
+            $wouldWin = (int)$g['would_have_won'] === 1;
+            $net = $wouldWin
+                ? (float)$g['est_resale'] * (1 - Playbook::FEE_RATE) - Playbook::SHIP_COST - (float)$g['final_price']
+                : null; ?>
+        <tr>
+            <td><?= e(date('M j', strtotime((string)$g['plan_date']))) ?></td>
+            <td><strong><?= e((string)$g['card']) ?></strong></td>
+            <td>$<?= number_format((float)$g['max_bid'], 2) ?></td>
+            <td>$<?= number_format((float)$g['final_price'], 2) ?></td>
+            <td><?= $wouldWin ? '<span style="color:#1d7d46">✓ would have won</span>' : '<span style="color:var(--muted)">✕ went above our max</span>' ?></td>
+            <td><?= $net !== null ? '<strong style="color:' . ($net >= 0 ? '#1d7d46' : '#e05555') . '">$' . number_format($net, 2) . '</strong>' : '—' ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table></div>
+    <?php endif; ?>
+</div>
 
 <div class="card" style="margin-bottom:16px">
     <h2 style="margin-top:0">📒 Trade log
