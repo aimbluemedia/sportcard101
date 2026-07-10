@@ -59,10 +59,13 @@ if ($uid === 0) {
 if ((string)($_GET['task'] ?? '') === 'daily') {
     $ai = new AiAnalyst($config['ai']);
     try {
-        // Record freshly closed auctions first so this morning's comps are current.
+        // Record freshly closed auctions and grade yesterday's predictions
+        // first, so this morning's comps and scorecard are current.
         $recorded = Comps::recordClosed($pdo);
+        $graded   = Playbook::gradeClosed($pdo);
         $res  = Playbook::build($pdo, $ai);
         $plan = Playbook::load($pdo, date('Y-m-d'));
+        $score = Playbook::scorecard($pdo);
 
         $sent = false;
         $to   = trim((string) setting('notify_email', ''));
@@ -70,7 +73,9 @@ if ((string)($_GET['task'] ?? '') === 'daily') {
             $sells   = Playbook::sellActions($pdo);
             $subject = 'Morning Playbook — ' . date('D, M j') . ': '
                      . ($res['buys'] > 0 ? $res['buys'] . ' buy target' . ($res['buys'] === 1 ? '' : 's') : 'no qualified buys');
-            $sent = Mailer::send($to, $subject, Playbook::emailText($plan, $sells), Playbook::emailHtml($plan, $sells));
+            $sent = Mailer::send($to, $subject,
+                Playbook::emailText($plan, $sells, $score),
+                Playbook::emailHtml($plan, $sells, $score));
         }
 
         echo "OK (daily playbook)\n";
@@ -78,6 +83,7 @@ if ((string)($_GET['task'] ?? '') === 'daily') {
         echo "watchlist:    {$res['watch']}\n";
         echo "exposure:     \${$res['exposure']}\n";
         echo "new comps:    {$recorded}\n";
+        echo "picks graded: {$graded}\n";
         echo "ai narrative: {$res['ai']}\n";
         echo 'email:        ' . ($sent ? "sent to {$to}" : 'not sent') . "\n";
     } catch (\Throwable $e) {
@@ -96,6 +102,7 @@ $started = microtime(true);
 try {
     $newDeals = $finder->scanSelected($uid, null, null);
     $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
+    $graded   = Playbook::gradeClosed($pdo);   // grade playbook picks against final prices
     $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions
 
     $secs = round(microtime(true) - $started, 1);
@@ -109,6 +116,7 @@ try {
     echo "OK\n";
     echo "new deals flagged: " . count($newDeals) . "\n";
     echo "new sold comps:    {$recorded}\n";
+    echo "picks graded:      {$graded}\n";
     echo "deal alerts sent:  " . count($alerts) . "\n";
     echo "ebay mode:         " . ($ebay->isMock() ? 'mock (no keyset)' : 'live') . "\n";
     echo "took:              {$secs}s\n";

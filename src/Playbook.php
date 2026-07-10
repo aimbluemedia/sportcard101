@@ -237,6 +237,92 @@ final class Playbook
         ];
     }
 
+    /**
+     * Grade predictions whose auctions have closed: record the real final
+     * price and whether our max bid would have won. Final price comes from
+     * sold_comps (the closing tracker); if an auction never produced a comp
+     * (e.g. zero bids), fall back to the last tracked listing price once the
+     * auction is 24h past its end. Returns the number of targets graded.
+     */
+    public static function gradeClosed(PDO $pdo): int
+    {
+        try {
+            $rows = $pdo->query(
+                "SELECT pt.id, pt.kind, pt.max_bid, pt.end_time,
+                        (SELECT sc.final_price FROM sold_comps sc WHERE sc.ebay_item_id = pt.ebay_item_id LIMIT 1) AS comp_final,
+                        (SELECT MAX(l.price) FROM listings l WHERE l.ebay_item_id = pt.ebay_item_id) AS last_price,
+                        (pt.end_time < (UTC_TIMESTAMP() - INTERVAL 24 HOUR)) AS long_closed
+                 FROM plan_targets pt
+                 WHERE pt.graded_at IS NULL
+                   AND pt.end_time IS NOT NULL
+                   AND pt.end_time < UTC_TIMESTAMP()"
+            )->fetchAll();
+        } catch (\Throwable $e) {
+            return 0; // tables not migrated yet
+        }
+
+        $upd = $pdo->prepare(
+            'UPDATE plan_targets SET final_price = ?, would_have_won = ?, graded_at = UTC_TIMESTAMP() WHERE id = ?'
+        );
+        $graded = 0;
+        foreach ($rows as $r) {
+            $final = $r['comp_final'] !== null
+                ? (float) $r['comp_final']
+                : ((int)$r['long_closed'] === 1 && $r['last_price'] !== null ? (float)$r['last_price'] : null);
+            if ($final === null) {
+                continue; // comp not recorded yet — try again next run
+            }
+            $won = ($r['kind'] === 'BUY' && $r['max_bid'] !== null)
+                ? (int) ($final <= (float)$r['max_bid'])
+                : null;
+            $upd->execute([$final, $won, (int)$r['id']]);
+            $graded++;
+        }
+        return $graded;
+    }
+
+    /**
+     * The paper-trading record over recent graded BUY picks: how often our
+     * max bid would have won, and what the flips would have netted (buying at
+     * the real final price, selling at the predicted resale, after costs).
+     * This is the gate for real money. Null when nothing is graded yet.
+     */
+    public static function scorecard(PDO $pdo, int $days = 14): ?array
+    {
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT pt.est_resale, pt.final_price, pt.would_have_won
+                 FROM plan_targets pt
+                 JOIN daily_plans dp ON dp.id = pt.plan_id
+                 WHERE pt.kind = 'BUY' AND pt.would_have_won IS NOT NULL
+                   AND dp.plan_date >= (CURDATE() - INTERVAL ? DAY)"
+            );
+            $stmt->execute([$days]);
+            $rows = $stmt->fetchAll();
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if (!$rows) {
+            return null;
+        }
+        $won   = array_values(array_filter($rows, fn ($r) => (int)$r['would_have_won'] === 1));
+        $paper = 0.0;
+        foreach ($won as $r) {
+            // Won at the real final price, sold at predicted resale, minus costs.
+            $paper += (float)$r['est_resale'] * (1 - self::FEE_RATE) - self::SHIP_COST - (float)$r['final_price'];
+        }
+        $rate = count($won) / count($rows);
+        return [
+            'days'      => $days,
+            'picks'     => count($rows),
+            'won'       => count($won),
+            'win_rate'  => (int) round($rate * 100),
+            'paper_net' => round($paper, 2),
+            // Real-money gate: enough sample, majority wins, and positive paper profit.
+            'ready'     => count($rows) >= 10 && $rate >= 0.55 && $paper > 0,
+        ];
+    }
+
     /** Load a plan + its targets for display/email. Latest plan when $date is null. */
     public static function load(PDO $pdo, ?string $date = null): ?array
     {
@@ -288,8 +374,22 @@ final class Playbook
 
     // ------------------------------------------------------------------ Email
 
+    /** One-line paper-record summary used by both email formats. */
+    private static function scorecardLine(array $sc): string
+    {
+        $line = sprintf(
+            'Paper record (last %d days): %d of %d picks would have won at our max bid (%d%%) · hypothetical net %s$%s.',
+            $sc['days'], $sc['won'], $sc['picks'], $sc['win_rate'],
+            $sc['paper_net'] < 0 ? '-' : '+', number_format(abs((float)$sc['paper_net']), 2)
+        );
+        $line .= $sc['ready']
+            ? ' ✅ Real-money gate MET — the system has earned a small live bankroll.'
+            : ' ⏳ Still proving itself — keep it on paper (gate: 10+ graded picks, 55%+ win rate, positive net).';
+        return $line;
+    }
+
     /** Morning email, same visual system as the deal alerts. */
-    public static function emailHtml(array $plan, array $sells): string
+    public static function emailHtml(array $plan, array $sells, ?array $scorecard = null): string
     {
         $font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
         $buys  = array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'BUY'));
@@ -344,6 +444,15 @@ final class Playbook
                 . $sellHtml . '</td></tr>';
         }
 
+        $scoreHtml = '';
+        if ($scorecard !== null) {
+            $color = $scorecard['ready'] ? '#1d7d46' : '#6e6e73';
+            $scoreHtml = '<tr><td style="padding:20px 28px;border-top:1px solid #e8e8ed">'
+                . '<p style="margin:0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#86868b;' . $font . '">Scorecard</p>'
+                . '<p style="margin:8px 0 0;font-size:13px;line-height:1.6;color:' . $color . ';' . $font . '">'
+                . \e(self::scorecardLine($scorecard)) . '</p></td></tr>';
+        }
+
         return
             '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all">' . \e((string)$plan['summary']) . '</div>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7">'
@@ -359,7 +468,7 @@ final class Playbook
             . ' &middot; planned exposure $' . number_format((float)$plan['exposure'], 2)
             . ' &middot; the max bid is a promise to yourself, not a suggestion.</p>'
             . '</td></tr>'
-            . $rows . $watchHtml . $sellHtml
+            . $rows . $watchHtml . $sellHtml . $scoreHtml
             . '</table>'
             . '<p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#86868b;' . $font . '">'
             . 'Full detail and the trade log are on your Daily Plan dashboard.<br>'
@@ -368,7 +477,7 @@ final class Playbook
     }
 
     /** Plain-text fallback for the morning email. */
-    public static function emailText(array $plan, array $sells): string
+    public static function emailText(array $plan, array $sells, ?array $scorecard = null): string
     {
         $lines = ['MORNING PLAYBOOK — ' . date('l, M j', strtotime((string)$plan['plan_date'])), ''];
         $lines[] = (string) $plan['summary'];
@@ -399,6 +508,11 @@ final class Playbook
             foreach ($sells as $s) {
                 $lines[] = "• {$s['card']} — {$s['action']}";
             }
+            $lines[] = '';
+        }
+        if ($scorecard !== null) {
+            $lines[] = 'SCORECARD:';
+            $lines[] = self::scorecardLine($scorecard);
             $lines[] = '';
         }
         $lines[] = '— SportCard101 Morning Playbook';
