@@ -8,14 +8,19 @@ declare(strict_types=1);
  * Settings page ("Cron secret key") or in config.php as:
  *     'cron' => ['key' => 'your-long-random-secret'],
  *
- * Cron command (every 30 min):
- *   *\/30 * * * * curl -s "https://sportcard101.com/cron.php?key=YOUR_SECRET" >/dev/null 2>&1
+ * Cron commands:
+ *   Scan (every 30 min):
+ *     *\/30 * * * * curl -s "https://sportcard101.com/cron.php?key=YOUR_SECRET" >/dev/null 2>&1
+ *   Morning Playbook (once a day, e.g. 7:00am — mind the server timezone):
+ *     0 7 * * * curl -s "https://sportcard101.com/cron.php?key=YOUR_SECRET&task=daily" >/dev/null 2>&1
  *
- * What each run does:
+ * What each scan run does:
  *   1. Scans every active channel (fresh auctions + a new bid snapshot each).
  *   2. Re-runs the AI value rating on deal candidates.
  *   3. Records any auctions that have since closed as sold comps.
  *   4. Emails new deals if mail is configured.
+ *
+ * task=daily builds the Morning Playbook (daily buy/sell plan) and emails it.
  */
 
 require __DIR__ . '/src/bootstrap.php';
@@ -25,6 +30,8 @@ use SportCard101\AiAnalyst;
 use SportCard101\DealFinder;
 use SportCard101\Comps;
 use SportCard101\DealAlerts;
+use SportCard101\Mailer;
+use SportCard101\Playbook;
 
 header('Content-Type: text/plain; charset=utf-8');
 
@@ -46,6 +53,38 @@ $uid = (int) ($pdo->query("SELECT id FROM users WHERE role = 'superadmin' ORDER 
 if ($uid === 0) {
     http_response_code(500);
     exit("No superadmin user found.\n");
+}
+
+// ---- Daily task: build + email the Morning Playbook -----------------------
+if ((string)($_GET['task'] ?? '') === 'daily') {
+    $ai = new AiAnalyst($config['ai']);
+    try {
+        // Record freshly closed auctions first so this morning's comps are current.
+        $recorded = Comps::recordClosed($pdo);
+        $res  = Playbook::build($pdo, $ai);
+        $plan = Playbook::load($pdo, date('Y-m-d'));
+
+        $sent = false;
+        $to   = trim((string) setting('notify_email', ''));
+        if ($to !== '' && $plan) {
+            $sells   = Playbook::sellActions($pdo);
+            $subject = 'Morning Playbook — ' . date('D, M j') . ': '
+                     . ($res['buys'] > 0 ? $res['buys'] . ' buy target' . ($res['buys'] === 1 ? '' : 's') : 'no qualified buys');
+            $sent = Mailer::send($to, $subject, Playbook::emailText($plan, $sells), Playbook::emailHtml($plan, $sells));
+        }
+
+        echo "OK (daily playbook)\n";
+        echo "buy targets:  {$res['buys']}\n";
+        echo "watchlist:    {$res['watch']}\n";
+        echo "exposure:     \${$res['exposure']}\n";
+        echo "new comps:    {$recorded}\n";
+        echo "ai narrative: {$res['ai']}\n";
+        echo 'email:        ' . ($sent ? "sent to {$to}" : 'not sent') . "\n";
+    } catch (\Throwable $e) {
+        http_response_code(500);
+        echo 'ERROR: ' . $e->getMessage() . "\n";
+    }
+    exit;
 }
 
 // ---- Run the scan + closing tracker --------------------------------------

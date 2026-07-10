@@ -168,6 +168,94 @@ final class AiAnalyst
         return $parsed['analyses'];
     }
 
+    /**
+     * Write the Morning Playbook narrative: a short market summary and an
+     * optional coaching note per buy target. The plan's numbers (max bids,
+     * margins) are computed deterministically by Playbook — the AI only adds
+     * context, it never changes the math. Returns null in mock mode or on any
+     * API failure so the playbook degrades gracefully.
+     *
+     * @param array $payload date, budget, targets[], watch[], heat[]
+     * @return array{summary: string, notes: array<string,string>}|null
+     */
+    public function planNarrative(array $payload): ?array
+    {
+        if ($this->mock) {
+            return null;
+        }
+
+        $system =
+            "You are a veteran sports-card flipper writing a SHORT morning briefing for a beginner " .
+            "with a small bankroll. You get today's buy targets (each with a pre-computed max bid " .
+            "derived from real sold comps), a watchlist, and a list of auctions drawing heavy bidding " .
+            "(market heat).\n\n" .
+            "- summary: 2-3 plain-English sentences. What kind of day is it? Where is demand hot? " .
+            "Remind them of the one discipline that matters most today. Never promise profit.\n" .
+            "- notes: for each buy target, AT MOST one short sentence of genuinely useful coaching " .
+            "(e.g. why this comp is trustworthy, what to double-check in the photos, when to place " .
+            "the bid). Skip a target if you have nothing beyond the numbers it already shows.\n" .
+            "Do not invent prices or change any max bid.";
+
+        $schema = [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'required' => ['summary', 'notes'],
+            'properties' => [
+                'summary' => ['type' => 'string'],
+                'notes'   => [
+                    'type'  => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'additionalProperties' => false,
+                        'required' => ['ebay_item_id', 'note'],
+                        'properties' => [
+                            'ebay_item_id' => ['type' => 'string'],
+                            'note'         => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $body = [
+            'model'      => $this->cfg['model'] ?? 'claude-opus-4-8',
+            'max_tokens' => 1500,
+            'system'     => $system,
+            'output_config' => [
+                'format' => ['type' => 'json_schema', 'schema' => $schema],
+            ],
+            'messages' => [[
+                'role'    => 'user',
+                'content' => "Today's plan data:\n" . json_encode($payload, JSON_UNESCAPED_SLASHES),
+            ]],
+        ];
+
+        try {
+            $resp = $this->httpPost('https://api.anthropic.com/v1/messages', $body);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        $data = json_decode($resp, true);
+        $text = null;
+        foreach ($data['content'] ?? [] as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $text = $block['text'];
+                break;
+            }
+        }
+        $parsed = $text !== null ? json_decode($text, true) : null;
+        if (!is_array($parsed) || !isset($parsed['summary'])) {
+            return null;
+        }
+        $notes = [];
+        foreach (($parsed['notes'] ?? []) as $n) {
+            if (!empty($n['ebay_item_id']) && !empty($n['note'])) {
+                $notes[(string)$n['ebay_item_id']] = (string) $n['note'];
+            }
+        }
+        return ['summary' => (string) $parsed['summary'], 'notes' => $notes];
+    }
+
     private function httpPost(string $url, array $body): string
     {
         $ch = curl_init($url);
