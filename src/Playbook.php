@@ -246,6 +246,9 @@ final class Playbook
      */
     public static function gradeClosed(PDO $pdo): int
     {
+        // Bookkeeping must never break the scan (or the deal alerts that run
+        // in the same cron) — swallow everything and grade what we can.
+        $graded = 0;
         try {
             $rows = $pdo->query(
                 "SELECT pt.id, pt.kind, pt.max_bid, pt.end_time,
@@ -257,26 +260,25 @@ final class Playbook
                    AND pt.end_time IS NOT NULL
                    AND pt.end_time < UTC_TIMESTAMP()"
             )->fetchAll();
-        } catch (\Throwable $e) {
-            return 0; // tables not migrated yet
-        }
 
-        $upd = $pdo->prepare(
-            'UPDATE plan_targets SET final_price = ?, would_have_won = ?, graded_at = UTC_TIMESTAMP() WHERE id = ?'
-        );
-        $graded = 0;
-        foreach ($rows as $r) {
-            $final = $r['comp_final'] !== null
-                ? (float) $r['comp_final']
-                : ((int)$r['long_closed'] === 1 && $r['last_price'] !== null ? (float)$r['last_price'] : null);
-            if ($final === null) {
-                continue; // comp not recorded yet — try again next run
+            $upd = $pdo->prepare(
+                'UPDATE plan_targets SET final_price = ?, would_have_won = ?, graded_at = UTC_TIMESTAMP() WHERE id = ?'
+            );
+            foreach ($rows as $r) {
+                $final = $r['comp_final'] !== null
+                    ? (float) $r['comp_final']
+                    : ((int)$r['long_closed'] === 1 && $r['last_price'] !== null ? (float)$r['last_price'] : null);
+                if ($final === null) {
+                    continue; // comp not recorded yet — try again next run
+                }
+                $won = ($r['kind'] === 'BUY' && $r['max_bid'] !== null)
+                    ? (int) ($final <= (float)$r['max_bid'])
+                    : null;
+                $upd->execute([$final, $won, (int)$r['id']]);
+                $graded++;
             }
-            $won = ($r['kind'] === 'BUY' && $r['max_bid'] !== null)
-                ? (int) ($final <= (float)$r['max_bid'])
-                : null;
-            $upd->execute([$final, $won, (int)$r['id']]);
-            $graded++;
+        } catch (\Throwable $e) {
+            // tables not migrated yet, or a transient DB error — next run retries
         }
         return $graded;
     }

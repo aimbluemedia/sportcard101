@@ -102,8 +102,8 @@ $started = microtime(true);
 try {
     $newDeals = $finder->scanSelected($uid, null, null);
     $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
-    $graded   = Playbook::gradeClosed($pdo);   // grade playbook picks against final prices
-    $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions
+    $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions FIRST
+    $graded   = Playbook::gradeClosed($pdo);   // then grade playbook picks (never blocks alerts)
 
     $secs = round(microtime(true) - $started, 1);
 
