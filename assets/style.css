@@ -69,6 +69,7 @@ h2 { font-size: 1.2rem; margin: 28px 0 12px; }
 .btn {
     background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
     padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: .92rem;
+    white-space: nowrap; display: inline-block;
 }
 .btn:hover { border-color: var(--accent); }
 .btn-scan { background: var(--accent); color: #1a1200; border: none; }
