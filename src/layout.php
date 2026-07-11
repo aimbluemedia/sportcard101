@@ -18,6 +18,7 @@ function nav_links(string $area): array
         'admin' => [
             ['/superadmin/', 'Dashboard'],
             ['/superadmin/dailyplan.php', 'Daily Plan'],
+            ['/superadmin/snapshot.php', 'Snap Shot'],
             ['/superadmin/members.php', 'Members'],
             ['/superadmin/pricing.php', 'Pricing'],
             ['/superadmin/content.php', 'Content'],
