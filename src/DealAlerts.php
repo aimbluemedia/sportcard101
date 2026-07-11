@@ -34,7 +34,15 @@ final class DealAlerts
             return [];
         }
 
-        self::email($to, $matches);
+        // Only mark auctions as notified when the email ACTUALLY sent —
+        // otherwise leave them unmarked so the next scan retries, and record
+        // the error where the Alerts page can show it.
+        if (!self::email($to, $matches)) {
+            \set_setting('alerts_last_error', date('M j, g:ia') . ' — ' . (Mailer::$lastError ?: 'unknown send error'));
+            return [];
+        }
+        \set_setting('alerts_last_error', '');
+        \set_setting('alerts_last_sent', date('Y-m-d H:i:s'));
 
         $mark = $pdo->prepare('UPDATE listings SET notified = 1 WHERE id = ?');
         foreach ($matches as $m) {
@@ -176,11 +184,11 @@ final class DealAlerts
     }
 
     /** Send the deal digest (HTML with a plain-text fallback). */
-    private static function email(string $to, array $matches): void
+    private static function email(string $to, array $matches): bool
     {
         $n = count($matches);
         $subject = "SportCard101: {$n} deal alert" . ($n === 1 ? '' : 's');
-        Mailer::send($to, $subject, self::emailText($matches), self::emailHtml($matches));
+        return Mailer::send($to, $subject, self::emailText($matches), self::emailHtml($matches));
     }
 
     /** Normalise one match into the display fields both email formats use. */

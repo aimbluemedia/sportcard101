@@ -197,6 +197,20 @@ layout_header('Deal Alerts', 'admin');
     <div class="flash flash-error">The <code>alert_triggers</code> table isn't created yet. Run <code>migrations/2026_alert_triggers.sql</code> in phpMyAdmin, then reload.</div>
 <?php endif; ?>
 
+<?php
+// Alert-email health: last successful send + any pending send error.
+$alertErr  = trim((string) setting('alerts_last_error', ''));
+$alertSent = (string) setting('alerts_last_sent', '');
+if ($alertErr !== ''): ?>
+    <div class="flash flash-error">Alert email is FAILING — last error: <?= e($alertErr) ?>.
+    Matched auctions are held and retried on every scan until sending works (check SMTP settings below, then use “Send test email”).</div>
+<?php elseif ($alertSent !== ''): ?>
+    <div class="card" style="margin-bottom:16px;padding:10px 16px;border-left:4px solid #3aa66a">
+        Last alert email sent: <strong><?= e(date('M j, g:ia', strtotime($alertSent))) ?></strong>
+        <span style="color:var(--muted)">— alerts only fire when a new, never-alerted auction matches a trigger; quiet stretches are normal.</span>
+    </div>
+<?php endif; ?>
+
 <!-- Add / edit trigger (top) -->
 <h2 id="form" style="margin-top:0"><?= $editing ? 'Edit trigger' : 'Add a trigger' ?></h2>
 <form method="post" class="searchbar triggerbar"><?= csrf_field() ?>
