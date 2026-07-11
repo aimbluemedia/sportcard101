@@ -5,7 +5,10 @@ require __DIR__ . '/../src/bootstrap.php';
 require __DIR__ . '/../src/layout.php';
 
 use SportCard101\Auth;
+use SportCard101\AiAnalyst;
 use SportCard101\Comps;
+use SportCard101\DealFinder;
+use SportCard101\EbayClient;
 use SportCard101\Playbook;
 
 Auth::requireAdmin();
@@ -20,6 +23,27 @@ Auth::requireAdmin();
 $SPORTS = card_sports();
 $sport  = isset($_GET['sport']) && isset($SPORTS[$_GET['sport']]) ? (string)$_GET['sport'] : 'all';
 $cfg    = Playbook::config();
+
+// ---- "Take snap shot now": run a fresh scan on demand ----------------------
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+    $sport = isset($_POST['sport']) && isset($SPORTS[$_POST['sport']]) ? (string)$_POST['sport'] : $sport;
+    $started = microtime(true);
+    try {
+        $ebay   = new EbayClient(ebay_config($config['ebay']));
+        $ai     = new AiAnalyst($config['ai']);
+        $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
+        $new      = $finder->scanSelected(Auth::userId(), null, null);
+        $recorded = Comps::recordClosed($pdo);
+        Playbook::gradeClosed($pdo);
+        $secs = round(microtime(true) - $started, 1);
+        flash('success', sprintf('Fresh snap shot taken in %ss — %d new deal%s flagged, %d closed auction%s recorded.',
+            $secs, count($new), count($new) === 1 ? '' : 's', $recorded, $recorded === 1 ? '' : 's'));
+    } catch (\Throwable $e) {
+        flash('error', 'Snap shot scan failed: ' . $e->getMessage());
+    }
+    redirect('/superadmin/snapshot.php' . ($sport !== 'all' ? '?sport=' . urlencode($sport) : ''));
+}
 
 // ---- Meta: how fresh is this snapshot? -------------------------------------
 $lastScan   = $pdo->query('SELECT MAX(last_scanned_at) FROM searches')->fetchColumn();
@@ -135,14 +159,21 @@ layout_header('Snap Shot', 'admin');
 Data as of last scan: <strong><?= $lastScan ? e(date('M j, g:ia', strtotime((string)$lastScan))) : 'never' ?></strong>
 · settings: <?= (int)$cfg['margin_pct'] ?>% margin, $<?= (int)$cfg['per_card'] ?>/card cap.</p>
 
-<form method="get" class="searchbar" style="margin-bottom:16px">
-    <select name="sport" onchange="this.form.submit()">
-        <option value="all">All sports</option>
-        <?php foreach ($SPORTS as $k => $m): ?>
-        <option value="<?= e($k) ?>" <?= $sport === $k ? 'selected' : '' ?>><?= e($m['emoji'] . ' ' . $m['label']) ?></option>
-        <?php endforeach; ?>
-    </select>
-</form>
+<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px">
+    <form method="get" class="searchbar" style="margin:0">
+        <select name="sport" onchange="this.form.submit()">
+            <option value="all">All sports</option>
+            <?php foreach ($SPORTS as $k => $m): ?>
+            <option value="<?= e($k) ?>" <?= $sport === $k ? 'selected' : '' ?>><?= e($m['emoji'] . ' ' . $m['label']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </form>
+    <form method="post" style="margin:0" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='📸 Scanning eBay… ~20s';">
+        <?= csrf_field() ?>
+        <input type="hidden" name="sport" value="<?= e($sport) ?>">
+        <button class="btn btn-primary" type="submit" title="Re-scans every active channel on eBay right now, then reloads this page with fresh numbers">📸 Take snap shot now</button>
+    </form>
+</div>
 
 <?php if ($snipe): ?>
 <div class="card" style="margin-bottom:16px;border-left:4px solid #e05555">
