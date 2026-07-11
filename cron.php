@@ -8,11 +8,16 @@ declare(strict_types=1);
  * Settings page ("Cron secret key") or in config.php as:
  *     'cron' => ['key' => 'your-long-random-secret'],
  *
- * Cron commands:
+ * Cron commands — prefer the direct PHP form (Hostinger's "PHP" cron type);
+ * it bypasses the web server entirely, so it keeps working even when curl
+ * from the cron host can't reach the domain:
  *   Scan (every 30 min):
- *     *\/30 * * * * curl -s "https://sportcard101.com/cron.php?key=YOUR_SECRET" >/dev/null 2>&1
+ *     *\/30 * * * * /usr/bin/php /path/to/public_html/cron.php YOUR_SECRET
  *   Morning Playbook (once a day, e.g. 7:00am — mind the server timezone):
- *     0 7 * * * curl -s "https://sportcard101.com/cron.php?key=YOUR_SECRET&task=daily" >/dev/null 2>&1
+ *     0 7 * * * /usr/bin/php /path/to/public_html/cron.php YOUR_SECRET daily
+ *
+ * The HTTP form also works (for manual browser tests or external cron):
+ *     https://sportcard101.com/cron.php?key=YOUR_SECRET[&task=daily]
  *
  * What each scan run does:
  *   1. Scans every active channel (fresh auctions + a new bid snapshot each).
@@ -36,8 +41,15 @@ use SportCard101\Playbook;
 header('Content-Type: text/plain; charset=utf-8');
 
 // ---- Authenticate the request --------------------------------------------
+// CLI (php cron.php KEY [daily]) or HTTP (?key=KEY[&task=daily]).
 $expected = (string) (setting('cron_key', '') ?: ($config['cron']['key'] ?? ''));
-$provided = (string) ($_GET['key'] ?? ($_SERVER['HTTP_X_CRON_KEY'] ?? ''));
+if (PHP_SAPI === 'cli') {
+    $provided = (string) ($argv[1] ?? '');
+    $task     = (string) ($argv[2] ?? '');
+} else {
+    $provided = (string) ($_GET['key'] ?? ($_SERVER['HTTP_X_CRON_KEY'] ?? ''));
+    $task     = (string) ($_GET['task'] ?? '');
+}
 
 if ($expected === '') {
     http_response_code(503);
@@ -56,7 +68,7 @@ if ($uid === 0) {
 }
 
 // ---- Daily task: build + email the Morning Playbook -----------------------
-if ((string)($_GET['task'] ?? '') === 'daily') {
+if ($task === 'daily') {
     $ai = new AiAnalyst($config['ai']);
     try {
         // Record freshly closed auctions and grade yesterday's predictions
