@@ -106,9 +106,10 @@ if ($cronLastRun) {
             <?php if ($cronStatus): ?> · <?= e($cronStatus) ?><?php endif; ?>
         </p>
     <?php endif; ?>
-    <p style="margin:6px 0 0;color:var(--muted)">Cron command (every 30 min):
-        <code>*/30 * * * * curl -s "https://sportcard101.com/cron.php?key=YOUR_SECRET" &gt;/dev/null 2&gt;&amp;1</code>
+    <p style="margin:6px 0 0;color:var(--muted)">Hostinger cron (type: <strong>PHP</strong>, every 30 min — minute <code>0,30</code>):
+        <code>public_html/cron.php YOUR_SECRET</code> · daily playbook (7am): <code>public_html/cron.php YOUR_SECRET daily</code>
     </p>
+    <p style="margin:6px 0 0;color:var(--muted)">Backup: if the host cron stalls, normal page visits auto-kick a scan after 35 quiet minutes (and the day's playbook after 7am), so the system heals itself whenever anyone opens the site.</p>
 </div>
 
 <form method="post" class="card" style="max-width:780px"><?= csrf_field() ?>
