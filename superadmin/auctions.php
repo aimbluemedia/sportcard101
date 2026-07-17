@@ -30,9 +30,18 @@ $sort  = isset($sorts[$_GET['sort'] ?? '']) ? (string)$_GET['sort'] : 'ending';
 
 // "Show" dropdown: value picks (auctions with an AI message), signed/autograph
 // cards, or all auctions. The landing page defaults to value picks.
-$show       = in_array($_GET['show'] ?? 'value', ['value', 'signed', 'all'], true) ? (string)$_GET['show'] : 'value';
+$show       = in_array($_GET['show'] ?? 'value', ['value', 'signed', 'rookie', 'signed_rookie', 'all'], true) ? (string)$_GET['show'] : 'value';
 $valueOnly  = ($show === 'value');
-$signedOnly = ($show === 'signed');
+$signedOnly = ($show === 'signed' || $show === 'signed_rookie');
+$rookieOnly = ($show === 'rookie' || $show === 'signed_rookie');
+
+// Title-based detection, shared by the Signed and Rookie filters. "RC" is
+// matched as a standalone word so e.g. "arch"/"search" don't false-positive.
+$SIGNED_SQL = "(l.title LIKE '%auto%' OR l.title LIKE '%autograph%' OR l.title LIKE '%signed%' OR l.title LIKE '%signature%')";
+$ROOKIE_SQL = "(l.title LIKE '%rookie%' OR l.ai_card LIKE '%rookie%'"
+            . " OR l.title LIKE '% rc %' OR l.title LIKE 'rc %' OR l.title LIKE '% rc'"
+            . " OR l.title LIKE '%(rc)%' OR l.title LIKE '% rc.%' OR l.title LIKE '% rc,%'"
+            . " OR l.ai_card LIKE '% rc %' OR l.ai_card LIKE '% rc')";
 
 // ------------------------------------------------------------------ Listings
 $where  = ["l.buying_option = 'AUCTION'", 'l.end_time IS NOT NULL', 'l.end_time > UTC_TIMESTAMP()', "s.grade LIKE 'PSA %'"];
@@ -41,8 +50,10 @@ if ($valueOnly) {
     $where[] = "l.ai_verdict IN ('BUY','WATCH') AND l.ai_reason IS NOT NULL AND l.ai_reason <> ''";
 }
 if ($signedOnly) {
-    // Autographed cards — detected from the listing title.
-    $where[] = "(l.title LIKE '%auto%' OR l.title LIKE '%autograph%' OR l.title LIKE '%signed%' OR l.title LIKE '%signature%')";
+    $where[] = $SIGNED_SQL;
+}
+if ($rookieOnly) {
+    $where[] = $ROOKIE_SQL;
 }
 if ($sport !== 'all') {
     $where[] = 's.keywords = ?';
@@ -178,6 +189,8 @@ layout_header('Auctions', 'admin');
     <select name="show" class="searchbar-select">
         <option value="value"<?= $show === 'value' ? ' selected' : '' ?>>💎 With messages</option>
         <option value="signed"<?= $show === 'signed' ? ' selected' : '' ?>>✍️ Signed / autograph</option>
+        <option value="rookie"<?= $show === 'rookie' ? ' selected' : '' ?>>🌟 Rookie Card</option>
+        <option value="signed_rookie"<?= $show === 'signed_rookie' ? ' selected' : '' ?>>✍️🌟 Signed / Rookie</option>
         <option value="all"<?= $show === 'all' ? ' selected' : '' ?>>All auctions</option>
     </select>
     <select name="sort" class="searchbar-select">
@@ -210,9 +223,15 @@ layout_header('Auctions', 'admin');
         <?php if ($valueOnly): ?>
             No PSA value picks yet — the AI hasn't flagged any under-market auctions<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?>.<br>
             Scan to pull fresh auctions, or switch <strong>“With messages” → “All auctions”</strong> in the bar to see everything captured.
+        <?php elseif ($signedOnly && $rookieOnly): ?>
+            No signed rookie PSA auctions captured<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?> yet — the rarest combo, so this is often empty.<br>
+            Detected from the listing title (auto/signed + rookie/RC). Scan to pull fresh auctions, or switch to <strong>“All auctions”</strong>.
         <?php elseif ($signedOnly): ?>
             No signed / autograph PSA auctions captured<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?> yet.<br>
             These are detected from the listing title (auto / signed). Scan to pull fresh auctions, or switch to <strong>“All auctions”</strong>.
+        <?php elseif ($rookieOnly): ?>
+            No rookie-card PSA auctions captured<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?> yet.<br>
+            Detected from the listing title (rookie / RC). Scan to pull fresh auctions, or switch to <strong>“All auctions”</strong>.
         <?php else: ?>
             No PSA auctions captured<?= $q !== '' ? ' for “' . e($q) . '”' : '' ?> yet.<br>
             <?php if ($sport !== 'all'): ?>Use the <strong>⟳ Scan</strong> button above<?php else: ?>Tap a sport and hit its <strong>⟳ Scan</strong> button<?php endif; ?> to pull them from eBay.
