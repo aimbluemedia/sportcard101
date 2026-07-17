@@ -92,6 +92,16 @@ function set_setting(string $key, string $val): void
 }
 
 /**
+ * eBay sold/completed-listings search for a card — the public version of
+ * eBay's Price Guide data. Affiliate-wrapped like every other eBay link.
+ */
+function ebay_sold_link(string $card): string
+{
+    $url = 'https://www.ebay.com/sch/i.html?LH_Sold=1&LH_Complete=1&_sop=13&_nkw=' . rawurlencode(trim($card));
+    return function_exists('epn_link') ? epn_link($url) : $url;
+}
+
+/**
  * Build the eBay client config, preferring values saved in the admin Settings
  * (DB) and falling back to config.php. Lets the superadmin manage keys in the UI.
  */
