@@ -20,6 +20,19 @@ try {
     $triggersReady = false;
 }
 
+// Self-migrate: add the rookie flag to older installs (one-time, silent).
+if ($triggersReady) {
+    try {
+        $pdo->query('SELECT rookie FROM alert_triggers LIMIT 1');
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec('ALTER TABLE alert_triggers ADD COLUMN rookie TINYINT(1) NOT NULL DEFAULT 0 AFTER signed');
+        } catch (\Throwable $e2) {
+            // If ALTER is not permitted, run migrations/2026_trigger_rookie.sql manually.
+        }
+    }
+}
+
 /** Human summary of a trigger's conditions (also used to auto-name). */
 function trigger_summary(array $t, array $sports): string
 {
@@ -27,6 +40,7 @@ function trigger_summary(array $t, array $sports): string
     $p[] = ($t['sport'] ?? 'all') === 'all' ? 'Any sport' : ($sports[$t['sport']]['label'] ?? $t['sport']);
     $p[] = ($t['grade'] ?? 'any') === 'any' ? 'any PSA grade' : ('PSA ' . $t['grade']);
     if (!empty($t['signed']))   $p[] = 'signed/auto';
+    if (!empty($t['rookie']))   $p[] = 'rookie';
     if (!empty($t['keywords'])) $p[] = '“' . $t['keywords'] . '”';
     if (($t['max_price'] ?? null) !== null && $t['max_price'] !== '') {
         $p[] = 'under $' . rtrim(rtrim(number_format((float)$t['max_price'], 2), '0'), '.');
@@ -100,6 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'sport'          => $sport,
             'grade'          => $grade,
             'signed'         => isset($_POST['signed']) ? 1 : 0,
+            'rookie'         => isset($_POST['rookie']) ? 1 : 0,
             'keywords'       => trim((string)($_POST['keywords'] ?? '')) ?: null,
             'max_price'      => $numOrNull('max_price'),
             'min_under_comp' => $numOrNull('min_under_comp'),
@@ -116,16 +131,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'add_trigger') {
             $pdo->prepare(
                 'INSERT INTO alert_triggers
-                    (label, active, sport, grade, signed, keywords, max_price, min_under_comp, require_comp, within_hours)
-                 VALUES (?,1,?,?,?,?,?,?,?,?)'
-            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['keywords'],
+                    (label, active, sport, grade, signed, rookie, keywords, max_price, min_under_comp, require_comp, within_hours)
+                 VALUES (?,1,?,?,?,?,?,?,?,?,?)'
+            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['rookie'], $data['keywords'],
                         $data['max_price'], $data['min_under_comp'], $data['require_comp'], $data['within_hours']]);
             flash('success', 'Trigger added.');
         } else {
             $pdo->prepare(
-                'UPDATE alert_triggers SET label=?, sport=?, grade=?, signed=?, keywords=?,
+                'UPDATE alert_triggers SET label=?, sport=?, grade=?, signed=?, rookie=?, keywords=?,
                     max_price=?, min_under_comp=?, require_comp=?, within_hours=? WHERE id=?'
-            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['keywords'],
+            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['rookie'], $data['keywords'],
                         $data['max_price'], $data['min_under_comp'], $data['require_comp'], $data['within_hours'],
                         (int)($_POST['id'] ?? 0)]);
             flash('success', 'Trigger updated.');
@@ -235,6 +250,7 @@ if ($alertErr !== ''): ?>
     <input name="within_hours" type="number" step="0.5" min="0" class="searchbar-input tb-num" value="<?= e($fv('within_hours')) ?>" placeholder="Ends ≤ hrs">
     <input name="keywords" class="searchbar-input" value="<?= e($fv('keywords')) ?>" placeholder="Title keyword">
     <label class="tb-check"><input type="checkbox" name="signed" value="1" <?= $chk('signed')?'checked':'' ?>> ✍️ Signed</label>
+    <label class="tb-check"><input type="checkbox" name="rookie" value="1" <?= $chk('rookie')?'checked':'' ?>> 🌟 Rookie</label>
     <label class="tb-check"><input type="checkbox" name="require_comp" value="1" <?= $chk('require_comp')?'checked':'' ?>> 📊 Under comp</label>
     <button class="btn-search" type="submit"><?= $editing ? 'Save changes' : 'Add trigger' ?></button>
     <?php if ($editing): ?><a class="btn btn-reset" href="/superadmin/alerts.php">Cancel</a><?php endif; ?>
