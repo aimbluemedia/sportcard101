@@ -95,7 +95,7 @@ final class Playbook
         }
 
         // ---- Score every candidate -----------------------------------------
-        $buys = $watch = [];
+        $buys = $watch = $noComp = [];
         foreach ($rows as $r) {
             $key  = $r['sport'] . '|' . $r['grade'] . '|' . Comps::cardKey((string)$r['title']);
             $comp = $stats[$key] ?? null;
@@ -115,8 +115,12 @@ final class Playbook
                 'comp_high'     => $comp['high'] ?? null,
             ];
 
-            // No trustworthy comp → AI-flagged cards go to the watchlist only.
+            // No trustworthy comp → candidate for cross-grade valuation
+            // ("diamond in the rough"); AI-flagged ones also hit the watchlist.
             if (!$comp || $comp['count'] < self::MIN_COMPS) {
+                if (count($noComp) < 150) {
+                    $noComp[] = $base + ['title' => (string)$r['title']];
+                }
                 if (($r['ai_verdict'] === 'BUY' || (int)$r['ai_hidden_gem'] === 1) && count($watch) < 50) {
                     $watch[] = $base + ['reason' =>
                         'Comp too thin (' . (int)($comp['count'] ?? 0) . ' sales in 90d) — AI likes it, verify value manually before bidding.'];
@@ -171,7 +175,63 @@ final class Playbook
             $exposure += $b['max_bid'];
             $picked[] = $b;
         }
-        $watch = array_slice($watch, 0, self::MAX_WATCH);
+        // ---- Diamonds in the rough: cross-grade valuation --------------------
+        // Cards with no comps in their own grade, valued from the SAME card's
+        // comps in another grade × the market's typical grade ratio (both
+        // computed from our sold_comps). Higher margin demanded for the extra
+        // uncertainty; always tell the buyer to verify against sold prices.
+        $diamonds = [];
+        if ($noComp) {
+            $valueMap = self::gradeValueMap($pdo);
+            $ratios   = self::gradeRatios($valueMap);
+            foreach ($noComp as $c) {
+                $grades = $valueMap[$c['sport'] . '|' . self::baseCardKey((string)$c['title'])] ?? null;
+                if (!$grades) {
+                    continue;
+                }
+                $est = null;
+                $basis = null;
+                foreach ($grades as $g => $info) {
+                    if ($g === $c['grade'] || $info['n'] < 3) {
+                        continue;
+                    }
+                    $ratio = $ratios[$c['grade'] . '|' . $g] ?? null;
+                    if ($ratio === null) {
+                        continue;
+                    }
+                    if ($basis === null || $info['n'] > $basis['n']) {
+                        $est   = $info['avg'] * $ratio;
+                        $basis = ['grade' => $g, 'avg' => $info['avg'], 'n' => $info['n'], 'ratio' => $ratio];
+                    }
+                }
+                if ($est === null || $est < 10) {
+                    continue;
+                }
+                $p = self::pricing($est, $cfg['margin_pct'] + 15, $cfg['per_card']); // uncertainty premium
+                if ($p['max_bid'] < 5 || $c['current_price'] > $p['max_bid']) {
+                    continue;
+                }
+                $diamonds[] = array_diff_key($c, ['title' => 1]) + [
+                    'max_bid'    => $p['max_bid'],
+                    'est_resale' => round($est, 2),
+                    'est_net'    => $p['est_net'],
+                    'reason'     => sprintf(
+                        '💎 No direct %s comps — est. value $%s from %s comps ($%s avg, %d sales) × typical %s/%s price ratio of %d%%. Suggested max bid $%s. Verify with recent sold prices before bidding.',
+                        $c['grade'], number_format($est, 2), $basis['grade'],
+                        number_format($basis['avg'], 2), $basis['n'],
+                        $c['grade'], $basis['grade'], (int) round($basis['ratio'] * 100),
+                        number_format($p['max_bid'], 2)
+                    ),
+                ];
+            }
+            usort($diamonds, fn ($a, $b) => $b['est_net'] <=> $a['est_net']);
+            $diamonds = array_slice($diamonds, 0, 5);
+
+            // A diamond supersedes any plain watch entry for the same auction.
+            $dIds  = array_column($diamonds, 'ebay_item_id');
+            $watch = array_values(array_filter($watch, fn ($w) => !in_array($w['ebay_item_id'], $dIds, true)));
+        }
+        $watch = array_merge($diamonds, array_slice($watch, 0, max(0, self::MAX_WATCH - count($diamonds))));
 
         // ---- Bid heat (demand context for the narrative) --------------------
         $heat = $pdo->query(
@@ -235,6 +295,86 @@ final class Playbook
             'exposure' => round($exposure, 2),
             'ai'       => $ai->isMock() ? 'mock' : 'live',
         ];
+    }
+
+    /**
+     * Card identity with the GRADE stripped, so the same card can be matched
+     * across grades ("...psa 10 gem mint" and "...psa 9 mint" collide).
+     */
+    public static function baseCardKey(string $titleOrKey): string
+    {
+        $k = Comps::cardKey($titleOrKey);
+        $k = preg_replace('/\b(psa|bgs|sgc|cgc)\s+\d+(\s+5)?\b/', ' ', $k) ?? $k; // "psa 10", "bgs 9 5"
+        $k = preg_replace('/\b(gem|mint|mt|gm|graded|grade|slab)\b/', ' ', $k) ?? $k;
+        return trim(preg_replace('/\s+/', ' ', $k) ?? $k);
+    }
+
+    /**
+     * Average sold price per grade for every card (grade-stripped identity),
+     * from the last 180 days of comps: "sport|baseKey" => grade => [avg, n].
+     */
+    private static function gradeValueMap(PDO $pdo): array
+    {
+        try {
+            $rows = $pdo->query(
+                "SELECT sport, grade, card_key, AVG(final_price) AS avg_price, COUNT(*) AS n
+                 FROM sold_comps
+                 WHERE closed_at >= (UTC_TIMESTAMP() - INTERVAL 180 DAY) AND grade LIKE 'PSA %'
+                 GROUP BY sport, grade, card_key
+                 HAVING n >= 3"
+            )->fetchAll();
+        } catch (\Throwable $e) {
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $bk = self::baseCardKey((string)$r['card_key']);
+            if ($bk === '') {
+                continue;
+            }
+            $k = $r['sport'] . '|' . $bk;
+            $g = (string) $r['grade'];
+            // Title variants of the same card+grade merge as a weighted average.
+            $cur = $out[$k][$g] ?? ['avg' => 0.0, 'n' => 0];
+            $n   = $cur['n'] + (int)$r['n'];
+            $out[$k][$g] = ['avg' => ($cur['avg'] * $cur['n'] + (float)$r['avg_price'] * (int)$r['n']) / $n, 'n' => $n];
+        }
+        return $out;
+    }
+
+    /**
+     * Market-wide grade price ratios ("PSA 9|PSA 10" => 0.45), each the median
+     * over cards that sold in BOTH grades. Requires 4+ card samples per pair.
+     */
+    private static function gradeRatios(array $valueMap): array
+    {
+        $samples = [];
+        foreach ($valueMap as $grades) {
+            if (count($grades) < 2) {
+                continue;
+            }
+            foreach ($grades as $g1 => $a) {
+                foreach ($grades as $g2 => $b) {
+                    if ($g1 !== $g2 && $a['avg'] > 0 && $b['avg'] > 0) {
+                        $samples[$g1 . '|' . $g2][] = $a['avg'] / $b['avg'];
+                    }
+                }
+            }
+        }
+        $out = [];
+        foreach ($samples as $pair => $list) {
+            if (count($list) < 4) {
+                continue;
+            }
+            sort($list);
+            $n   = count($list);
+            $mid = intdiv($n, 2);
+            $ratio = $n % 2 ? $list[$mid] : ($list[$mid - 1] + $list[$mid]) / 2;
+            if ($ratio >= 0.05 && $ratio <= 2.0) {
+                $out[$pair] = $ratio;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -395,7 +535,9 @@ final class Playbook
     {
         $font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
         $buys  = array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'BUY'));
-        $watch = array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'WATCH'));
+        $watchAll = array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'WATCH'));
+        $gems  = array_values(array_filter($watchAll, fn ($t) => str_starts_with((string)$t['reason'], '💎')));
+        $watch = array_values(array_filter($watchAll, fn ($t) => !str_starts_with((string)$t['reason'], '💎')));
         $dateNice = date('l, M j', strtotime((string)$plan['plan_date']));
 
         $rows = '';
@@ -414,13 +556,36 @@ final class Playbook
                 . '<p style="margin:8px 0 0;font-size:12px;line-height:1.5;color:#86868b;' . $font . '">' . \e((string)$t['reason']) . '</p>'
                 . '<p style="margin:14px 0 0"><a href="' . \e(\epn_link((string)$t['item_url'])) . '" '
                 . 'style="display:inline-block;background:#0071e3;color:#ffffff;font-size:13px;font-weight:600;line-height:1;'
-                . 'padding:10px 20px;border-radius:980px;text-decoration:none;' . $font . '">View on eBay</a></p>'
+                . 'padding:10px 20px;border-radius:980px;text-decoration:none;' . $font . '">View on eBay</a>'
+                . ' &nbsp; <a href="' . \e(\ebay_sold_link((string)$t['card'])) . '" '
+                . 'style="font-size:12px;color:#0071e3;text-decoration:none;' . $font . '">recent sold prices &rsaquo;</a></p>'
                 . '</td></tr>';
         }
         if (!$buys) {
             $rows = '<tr><td style="padding:22px 28px;border-top:1px solid #e8e8ed">'
                 . '<p style="margin:0;font-size:14px;line-height:1.5;color:#1d1d1f;' . $font . '">No buy targets today. '
                 . 'Nothing met the comp-confidence and margin bar — sitting out is the profitable move.</p></td></tr>';
+        }
+
+        $gemHtml = '';
+        foreach ($gems as $t) {
+            $hrs  = \hours_until((string)$t['end_time']);
+            $ends = $hrs === null ? '' : ' &middot; ends in ~' . ($hrs >= 48 ? round($hrs / 24) . ' days' : round($hrs) . 'h');
+            $gemHtml .=
+                '<p style="margin:14px 0 0;font-size:14px;font-weight:600;color:#1d1d1f;' . $font . '">' . \e((string)$t['card']) . '</p>'
+                . '<p style="margin:4px 0 0;font-size:12px;color:#6e6e73;' . $font . '">Now $' . number_format((float)$t['current_price'], 2)
+                . ' &middot; ' . (int)$t['bid_count'] . ' bids' . $ends
+                . ' &middot; <span style="font-weight:700;color:#b8860b">est. value $' . number_format((float)$t['est_resale'], 2) . '</span></p>'
+                . '<p style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#86868b;' . $font . '">' . \e((string)$t['reason']) . '</p>'
+                . '<p style="margin:8px 0 0;font-size:12px;' . $font . '">'
+                . '<a href="' . \e(\epn_link((string)$t['item_url'])) . '" style="color:#0071e3;text-decoration:none;font-weight:600">View on eBay</a>'
+                . ' &nbsp;&middot;&nbsp; <a href="' . \e(\ebay_sold_link((string)$t['card'])) . '" style="color:#0071e3;text-decoration:none">recent sold prices &rsaquo;</a></p>';
+        }
+        if ($gemHtml !== '') {
+            $gemHtml = '<tr><td style="padding:20px 28px;border-top:1px solid #e8e8ed;background:#fffaf0">'
+                . '<p style="margin:0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#b8860b;' . $font . '">💎 Diamonds in the rough</p>'
+                . '<p style="margin:6px 0 0;font-size:12px;color:#86868b;' . $font . '">No comps in their own grade — valued from the same card\'s sales in another grade. Higher risk, higher homework: always check the sold prices link first.</p>'
+                . $gemHtml . '</td></tr>';
         }
 
         $watchHtml = '';
@@ -470,7 +635,7 @@ final class Playbook
             . ' &middot; planned exposure $' . number_format((float)$plan['exposure'], 2)
             . ' &middot; the max bid is a promise to yourself, not a suggestion.</p>'
             . '</td></tr>'
-            . $rows . $watchHtml . $sellHtml . $scoreHtml
+            . $rows . $gemHtml . $watchHtml . $sellHtml . $scoreHtml
             . '</table>'
             . '<p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#86868b;' . $font . '">'
             . 'Full detail and the trade log are on your Daily Plan dashboard.<br>'
@@ -497,7 +662,19 @@ final class Playbook
             $lines[] = '  View on eBay: ' . \epn_link((string)$t['item_url']);
             $lines[] = '';
         }
-        $watch = array_slice(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'WATCH'), 0, 5);
+        $watchAll = array_filter($plan['targets'], fn ($t) => $t['kind'] === 'WATCH');
+        $gems  = array_filter($watchAll, fn ($t) => str_starts_with((string)$t['reason'], '💎'));
+        $watch = array_slice(array_filter($watchAll, fn ($t) => !str_starts_with((string)$t['reason'], '💎')), 0, 5);
+        if ($gems) {
+            $lines[] = 'DIAMONDS IN THE ROUGH (cross-grade value — verify before bidding):';
+            foreach ($gems as $t) {
+                $lines[] = "• {$t['card']} — now \$" . number_format((float)$t['current_price'], 2)
+                    . ', est. value $' . number_format((float)$t['est_resale'], 2);
+                $lines[] = "  {$t['reason']}";
+                $lines[] = '  Sold prices: ' . \ebay_sold_link((string)$t['card']);
+            }
+            $lines[] = '';
+        }
         if ($watch) {
             $lines[] = 'WATCHLIST:';
             foreach ($watch as $t) {
