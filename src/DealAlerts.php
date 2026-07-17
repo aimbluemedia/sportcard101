@@ -107,10 +107,11 @@ final class DealAlerts
             $hoursLeft = \hours_until((string)$r['end_time']) ?? 0.0;
             $titleLc   = strtolower((string)$r['title']);
             $isSigned  = (bool) preg_match('/\b(auto|autograph|signed|signature)/i', $titleLc);
+            $isRookie  = (bool) preg_match('/\b(rookie|rc)\b/i', $titleLc . ' ' . strtolower((string)($r['ai_card'] ?? '')));
 
             $fired = [];
             foreach ($triggers as $t) {
-                if (self::matches($t, $r, $price, $under, $hoursLeft, $titleLc, $isSigned)) {
+                if (self::matches($t, $r, $price, $under, $hoursLeft, $titleLc, $isSigned, $isRookie)) {
                     $fired[] = $t['label'];
                 }
             }
@@ -135,7 +136,7 @@ final class DealAlerts
     }
 
     /** Does one auction satisfy every condition set on one trigger? */
-    private static function matches(array $t, array $r, float $price, ?float $under, float $hoursLeft, string $titleLc, bool $isSigned): bool
+    private static function matches(array $t, array $r, float $price, ?float $under, float $hoursLeft, string $titleLc, bool $isSigned, bool $isRookie = false): bool
     {
         // Sport.
         if (($t['sport'] ?? 'all') !== 'all' && $t['sport'] !== $r['sport']) {
@@ -147,6 +148,10 @@ final class DealAlerts
         }
         // Signed / autograph.
         if (!empty($t['signed']) && !$isSigned) {
+            return false;
+        }
+        // Rookie card ("rookie" or "RC" in the title / AI-normalised name).
+        if (!empty($t['rookie']) && !$isRookie) {
             return false;
         }
         // Keyword in title.
