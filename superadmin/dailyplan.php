@@ -147,7 +147,7 @@ layout_header('Daily Plan', 'admin');
                 <td>$<?= number_format((float)$t['comp_median'], 2) ?> <small style="color:var(--muted)">(<?= (int)$t['comp_count'] ?> sales)</small></td>
                 <td><strong style="color:#0071e3;font-size:15px">$<?= number_format((float)$t['max_bid'], 2) ?></strong></td>
                 <td style="color:#1d7d46">$<?= number_format((float)$t['est_net'], 2) ?></td>
-                <td><a class="btn" href="<?= e(epn_link((string)$t['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+                <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$t['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)$t['card'])) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
                 <td>
                     <form method="post" style="display:flex;gap:6px;align-items:center"><?= csrf_field() ?>
                         <input type="hidden" name="action" value="trade_add">
@@ -176,7 +176,7 @@ layout_header('Daily Plan', 'admin');
                 <td>$<?= number_format((float)$t['current_price'], 2) ?></td>
                 <td><?= (int)$t['bid_count'] ?></td>
                 <td><small><?= e((string)$t['reason']) ?></small></td>
-                <td><a class="btn" href="<?= e(epn_link((string)$t['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+                <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$t['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)$t['card'])) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
             </tr>
             <?php endforeach; ?>
         </table></div>

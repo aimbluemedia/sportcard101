@@ -190,7 +190,7 @@ Data as of last scan: <strong><?= $lastScan ? e(date('M j, g:ia', strtotime((str
             <td><strong style="color:#0071e3">$<?= number_format((float)$x['max_bid'], 2) ?></strong></td>
             <td>$<?= number_format((float)$x['headroom'], 2) ?></td>
             <td style="color:#1d7d46">$<?= number_format((float)$x['est_net'], 2) ?></td>
-            <td><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+            <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)($r['ai_card'] ?: $r['title']))) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
@@ -218,7 +218,7 @@ Data as of last scan: <strong><?= $lastScan ? e(date('M j, g:ia', strtotime((str
             <td>$<?= number_format((float)$x['headroom'], 2) ?></td>
             <td style="color:#1d7d46">$<?= number_format((float)$x['est_net'], 2) ?></td>
             <td><?= $r['ai_verdict'] ? e((string)$r['ai_verdict']) : '—' ?><?= (int)$r['ai_hidden_gem'] === 1 ? ' 💎' : '' ?></td>
-            <td><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+            <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)($r['ai_card'] ?: $r['title']))) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
@@ -239,7 +239,7 @@ Data as of last scan: <strong><?= $lastScan ? e(date('M j, g:ia', strtotime((str
             <td><?= (int)$r['bid_count'] ?></td>
             <td>$<?= number_format((float)$r['price'], 2) ?></td>
             <td><?= snap_ends((string)$r['end_time']) ?></td>
-            <td><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+            <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)($r['ai_card'] ?: $r['title']))) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
@@ -258,7 +258,7 @@ Data as of last scan: <strong><?= $lastScan ? e(date('M j, g:ia', strtotime((str
             <td>$<?= number_format((float)$r['price'], 2) ?></td>
             <td>$<?= number_format((float)$x['comp']['median'], 2) ?> <small style="color:var(--muted)">(<?= (int)$x['comp']['count'] ?>)</small></td>
             <td style="color:#1d7d46"><strong>$<?= number_format((float)$x['net'], 2) ?></strong></td>
-            <td><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+            <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)($r['ai_card'] ?: $r['title']))) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
@@ -278,7 +278,7 @@ Data as of last scan: <strong><?= $lastScan ? e(date('M j, g:ia', strtotime((str
             <td>$<?= number_format((float)$r['price'], 2) ?></td>
             <td><?= (int)$r['bid_count'] ?></td>
             <td><?= snap_ends((string)$r['end_time']) ?></td>
-            <td><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+            <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$r['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)($r['ai_card'] ?: $r['title']))) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
