@@ -96,8 +96,10 @@ foreach ($trades as $t) {
     }
 }
 
-$buys  = $plan ? array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'BUY')) : [];
-$watch = $plan ? array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'WATCH')) : [];
+$buys     = $plan ? array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'BUY')) : [];
+$watchAll = $plan ? array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'WATCH')) : [];
+$gems     = array_values(array_filter($watchAll, fn ($t) => str_starts_with((string)$t['reason'], '💎')));
+$watch    = array_values(array_filter($watchAll, fn ($t) => !str_starts_with((string)$t['reason'], '💎')));
 
 layout_header('Daily Plan', 'admin');
 ?>
@@ -164,6 +166,29 @@ layout_header('Daily Plan', 'admin');
         </table></div>
         <?php endif; ?>
     </div>
+
+    <?php if ($gems): ?>
+    <div class="card" style="margin-bottom:16px;border-left:4px solid #b8860b">
+        <h2 style="margin-top:0">💎 Diamonds in the rough (<?= count($gems) ?>)</h2>
+        <p class="sub" style="margin-bottom:12px">No comps in their own grade — valued from the same card's sales in another grade × the market's typical grade ratio. Higher risk: always check the sold prices link before bidding.</p>
+        <div style="overflow-x:auto"><table>
+            <tr><th>Card</th><th>Now</th><th>Bids</th><th>Ends</th><th>Est. value</th><th>Suggested max</th><th>How it was valued</th><th></th></tr>
+            <?php foreach ($gems as $t):
+                $hrs = hours_until((string)$t['end_time']); ?>
+            <tr>
+                <td><strong><?= e((string)$t['card']) ?></strong></td>
+                <td>$<?= number_format((float)$t['current_price'], 2) ?></td>
+                <td><?= (int)$t['bid_count'] ?></td>
+                <td><?= $hrs === null ? '—' : '~' . round($hrs) . 'h' ?></td>
+                <td><strong style="color:#b8860b">$<?= number_format((float)$t['est_resale'], 2) ?></strong></td>
+                <td><strong style="color:#0071e3">$<?= number_format((float)$t['max_bid'], 2) ?></strong></td>
+                <td><small><?= e(ltrim((string)$t['reason'], '💎 ')) ?></small></td>
+                <td><div style="display:flex;gap:6px"><a class="btn" href="<?= e(epn_link((string)$t['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a><a class="btn btn-sm" href="<?= e(ebay_sold_link((string)$t['card'])) ?>" target="_blank" rel="noopener" title="Recent sold prices for this card on eBay">Sold $</a></div></td>
+            </tr>
+            <?php endforeach; ?>
+        </table></div>
+    </div>
+    <?php endif; ?>
 
     <?php if ($watch): ?>
     <div class="card" style="margin-bottom:16px">
