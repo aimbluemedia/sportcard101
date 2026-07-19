@@ -18,18 +18,24 @@ function nav_links(string $area): array
         ],
         'admin' => [
             ['/superadmin/', 'Dashboard'],
-            ['/superadmin/dailyplan.php', 'Daily Plan'],
-            ['/superadmin/snapshot.php', 'Snap Shot'],
-            ['/superadmin/lots.php', 'Lots'],
-            ['/superadmin/members.php', 'Members'],
-            ['/superadmin/collections.php', 'Collections'],
-            ['/superadmin/pricing.php', 'Pricing'],
-            ['/superadmin/content.php', 'Content'],
-            ['/superadmin/searches.php', 'AI App'],
-            ['/superadmin/auctions.php', 'Auctions'],
-            ['/superadmin/highbids.php', 'High Bids'],
-            ['/superadmin/comps.php', 'Comps'],
-            ['/superadmin/alerts.php', 'Alerts'],
+            ['group' => '🗃️ My Collection', 'items' => [
+                ['/superadmin/dailyplan.php', 'Daily Plan'],
+                ['/superadmin/collections.php', 'Collections'],
+            ]],
+            ['group' => '🔨 Auction', 'items' => [
+                ['/superadmin/auctions.php', 'Auctions'],
+                ['/superadmin/snapshot.php', 'Snap Shot'],
+                ['/superadmin/lots.php', 'Lots'],
+                ['/superadmin/highbids.php', 'High Bids'],
+                ['/superadmin/comps.php', 'Comps'],
+                ['/superadmin/alerts.php', 'Alerts'],
+                ['/superadmin/searches.php', 'AI App'],
+            ]],
+            ['group' => '👥 Members', 'items' => [
+                ['/superadmin/members.php', 'Members'],
+                ['/superadmin/pricing.php', 'Pricing'],
+                ['/superadmin/content.php', 'Content'],
+            ]],
             ['/superadmin/settings.php', 'Settings'],
         ],
         default => [
@@ -62,10 +68,25 @@ function layout_header(string $title, string $area = 'public'): void
     <aside class="sidebar">
         <a class="brand" href="<?= e($home) ?>">🃏 Sport<span>Card101</span><?php if ($area === 'admin'): ?> <small>admin</small><?php endif; ?></a>
         <nav class="side-nav">
-            <?php foreach (nav_links($area) as [$href, $label]):
-                $isActive = ($path === $href)
-                    || (in_array($href, ['/superadmin/', '/member/'], true) && in_array($path, [$href, $href . 'index.php'], true)); ?>
-                <a class="<?= $isActive ? 'active' : '' ?>" href="<?= e($href) ?>"><?= e($label) ?></a>
+            <?php foreach (nav_links($area) as $item):
+                if (isset($item['group'])):
+                    // Collapsible category — open when it contains the active page.
+                    $groupActive = false;
+                    foreach ($item['items'] as [$h, ]) {
+                        if ($path === $h) { $groupActive = true; break; }
+                    } ?>
+                    <details class="nav-group"<?= $groupActive ? ' open' : '' ?>>
+                        <summary><?= e($item['group']) ?></summary>
+                        <?php foreach ($item['items'] as [$href, $label]): ?>
+                            <a class="sub<?= $path === $href ? ' active' : '' ?>" href="<?= e($href) ?>"><?= e($label) ?></a>
+                        <?php endforeach; ?>
+                    </details>
+                <?php else:
+                    [$href, $label] = $item;
+                    $isActive = ($path === $href)
+                        || (in_array($href, ['/superadmin/', '/member/'], true) && in_array($path, [$href, $href . 'index.php'], true)); ?>
+                    <a class="<?= $isActive ? 'active' : '' ?>" href="<?= e($href) ?>"><?= e($label) ?></a>
+                <?php endif; ?>
             <?php endforeach; ?>
         </nav>
         <div class="side-foot">
