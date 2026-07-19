@@ -12,6 +12,7 @@ function nav_links(string $area): array
         'member' => [
             ['/member/', 'Dashboard'],
             ['/member/deals.php', 'AI Deals'],
+            ['/member/inventory.php', 'My Collection'],
             ['/member/learn.php', 'Learn'],
             ['/member/account.php', 'Account'],
         ],
@@ -21,6 +22,7 @@ function nav_links(string $area): array
             ['/superadmin/snapshot.php', 'Snap Shot'],
             ['/superadmin/lots.php', 'Lots'],
             ['/superadmin/members.php', 'Members'],
+            ['/superadmin/collections.php', 'Collections'],
             ['/superadmin/pricing.php', 'Pricing'],
             ['/superadmin/content.php', 'Content'],
             ['/superadmin/searches.php', 'AI App'],
