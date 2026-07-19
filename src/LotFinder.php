@@ -43,6 +43,7 @@ final class LotFinder
                 ai_est_high   DECIMAL(10,2) DEFAULT NULL,
                 ai_reason     VARCHAR(512) DEFAULT NULL,
                 analyzed_at   DATETIME DEFAULT NULL,
+                notified      TINYINT(1) NOT NULL DEFAULT 0,
                 first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 last_seen_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
@@ -50,6 +51,15 @@ final class LotFinder
                 KEY idx_end (end_time)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
         );
+        // Self-migrate: alert de-dupe flag for installs created before it existed.
+        try {
+            $pdo->query('SELECT notified FROM lots LIMIT 1');
+        } catch (\Throwable $e) {
+            try {
+                $pdo->exec('ALTER TABLE lots ADD COLUMN notified TINYINT(1) NOT NULL DEFAULT 0 AFTER analyzed_at');
+            } catch (\Throwable $e2) {
+            }
+        }
     }
 
     /** Best-effort card count parsed from a lot title. Null when unclear. */
@@ -150,5 +160,143 @@ final class LotFinder
         }
 
         return ['found' => count($seen), 'new' => $new, 'analyzed' => $analyzed];
+    }
+
+    /**
+     * Email un-notified BUY-verdict lots (same gates and retry semantics as
+     * the deal alerts: only marked notified after a successful send).
+     * Returns the number of lots alerted.
+     */
+    public static function alert(PDO $pdo): int
+    {
+        if ((string) \setting('notify_enabled', '0') !== '1') {
+            return 0;
+        }
+        $to = trim((string) \setting('notify_email', ''));
+        if ($to === '') {
+            return 0;
+        }
+        try {
+            $lots = $pdo->query(
+                "SELECT * FROM lots
+                 WHERE ai_verdict = 'BUY' AND notified = 0 AND end_time > UTC_TIMESTAMP()
+                 ORDER BY end_time ASC LIMIT 10"
+            )->fetchAll();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+        if (!$lots) {
+            return 0;
+        }
+        $n = count($lots);
+        $subject = "SportCard101: {$n} bulk lot deal" . ($n === 1 ? '' : 's');
+        if (!Mailer::send($to, $subject, self::emailText($lots), self::emailHtml($lots))) {
+            return 0; // next scan retries
+        }
+        $mark = $pdo->prepare('UPDATE lots SET notified = 1 WHERE id = ?');
+        foreach ($lots as $l) {
+            $mark->execute([(int)$l['id']]);
+        }
+        return $n;
+    }
+
+    /** Fields both email formats share for one lot row. */
+    public static function displayFields(array $l): array
+    {
+        $cards = $l['est_cards'] !== null ? (int)$l['est_cards'] : null;
+        $hrs   = \hours_until((string)$l['end_time']);
+        return [
+            'title'    => (string) $l['title'],
+            'price'    => '$' . number_format((float)$l['price'], 2),
+            'bids'     => $l['bid_count'] !== null ? (int)$l['bid_count'] : 0,
+            'ends'     => $hrs === null ? '' : ($hrs >= 48 ? '~' . round($hrs / 24) . ' days' : '~' . round($hrs) . 'h'),
+            'cards'    => $cards,
+            'per_card' => ($cards && $cards > 0) ? '$' . number_format((float)$l['price'] / $cards, 2) : null,
+            'est'      => ($l['ai_est_low'] !== null && $l['ai_est_high'] !== null && (float)$l['ai_est_high'] > 0)
+                ? '$' . number_format((float)$l['ai_est_low'], 0) . '–$' . number_format((float)$l['ai_est_high'], 0)
+                : null,
+            'reason'   => (string) ($l['ai_reason'] ?? ''),
+            'url'      => \epn_link((string)$l['item_url']),
+        ];
+    }
+
+    /** One HTML block per lot — used by the alert email and the playbook email. */
+    public static function emailRows(array $lots, string $font): string
+    {
+        $rows = '';
+        foreach ($lots as $l) {
+            $d = self::displayFields($l);
+            $meta = 'Now <span style="font-weight:600;color:#1d1d1f">' . \e($d['price']) . '</span>'
+                . ' &middot; ' . $d['bids'] . ' bid' . ($d['bids'] === 1 ? '' : 's')
+                . ($d['ends'] !== '' ? ' &middot; ends in ' . \e($d['ends']) : '')
+                . ($d['cards'] !== null ? ' &middot; ~' . $d['cards'] . ' cards' : '')
+                . ($d['per_card'] !== null ? ' &middot; <span style="font-weight:600;color:#1d1d1f">' . \e($d['per_card']) . '/card</span>' : '');
+            $rows .=
+                '<tr><td style="padding:22px 28px;border-top:1px solid #e8e8ed">'
+                . '<p style="margin:0;font-size:15px;line-height:1.4;font-weight:600;color:#1d1d1f;' . $font . '">' . \e($d['title']) . '</p>'
+                . '<p style="margin:6px 0 0;font-size:13px;line-height:1.4;color:#6e6e73;' . $font . '">' . $meta . '</p>'
+                . ($d['est'] !== null
+                    ? '<p style="margin:8px 0 0;font-size:13px;font-weight:700;color:#1d7d46;' . $font . '">Est. break-up value: ' . \e($d['est']) . '</p>'
+                    : '')
+                . ($d['reason'] !== ''
+                    ? '<p style="margin:8px 0 0;font-size:12px;line-height:1.5;color:#86868b;' . $font . '">' . \e($d['reason']) . '</p>'
+                    : '')
+                . '<p style="margin:14px 0 0"><a href="' . \e($d['url']) . '" '
+                . 'style="display:inline-block;background:#0071e3;color:#ffffff;font-size:13px;font-weight:600;line-height:1;'
+                . 'padding:10px 20px;border-radius:980px;text-decoration:none;' . $font . '">View on eBay</a></p>'
+                . '</td></tr>';
+        }
+        return $rows;
+    }
+
+    /** Standalone alert email for BUY-verdict lots. */
+    public static function emailHtml(array $lots): string
+    {
+        $font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+        $n = count($lots);
+        $intro = $n . ' bulk lot' . ($n === 1 ? '' : 's') . ' where the current bid sits under the AI\'s break-up estimate. '
+               . 'Estimates come from titles only — inspect the photos before bidding.';
+        return
+            '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all">' . \e($intro) . '</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7">'
+            . '<tr><td align="center" style="padding:32px 16px">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:18px">'
+            . '<tr><td style="padding:30px 28px 6px">'
+            . '<p style="margin:0;font-size:21px;font-weight:700;letter-spacing:-0.3px;color:#1d1d1f;' . $font . '">SportCard101</p>'
+            . '<p style="margin:3px 0 0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#86868b;' . $font . '">Bulk Lot Alerts</p>'
+            . '</td></tr>'
+            . '<tr><td style="padding:14px 28px 22px">'
+            . '<p style="margin:0;font-size:14px;line-height:1.6;color:#1d1d1f;' . $font . '">' . \e($intro) . '</p>'
+            . '</td></tr>'
+            . self::emailRows($lots, $font)
+            . '</table>'
+            . '<p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#86868b;' . $font . '">'
+            . 'Full lot list is on your Lots dashboard.<br>&copy; ' . date('Y') . ' SportCard101 &middot; Bulk Lots</p>'
+            . '</td></tr></table>';
+    }
+
+    /** Plain-text fallback for the lot alert email. */
+    public static function emailText(array $lots): string
+    {
+        $n = count($lots);
+        $lines = ["{$n} bulk lot" . ($n === 1 ? '' : 's') . ' worth a look (verify photos before bidding):', ''];
+        foreach ($lots as $l) {
+            $d = self::displayFields($l);
+            $lines[] = "• {$d['title']}";
+            $lines[] = "  Now {$d['price']} · {$d['bids']} bids"
+                . ($d['ends'] !== '' ? " · ends in {$d['ends']}" : '')
+                . ($d['cards'] !== null ? " · ~{$d['cards']} cards" : '')
+                . ($d['per_card'] !== null ? " · {$d['per_card']}/card" : '');
+            if ($d['est'] !== null) {
+                $lines[] = "  Est. break-up value: {$d['est']}";
+            }
+            if ($d['reason'] !== '') {
+                $lines[] = "  {$d['reason']}";
+            }
+            $lines[] = "  View on eBay: {$d['url']}";
+            $lines[] = '';
+        }
+        $lines[] = '— SportCard101 bulk lot alerts';
+        return implode("\n", $lines);
     }
 }
