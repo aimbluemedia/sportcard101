@@ -78,7 +78,7 @@ function layout_header(string $title, string $area = 'public'): void
                     <details class="nav-group"<?= $groupActive ? ' open' : '' ?>>
                         <summary><?= e($item['group']) ?></summary>
                         <?php foreach ($item['items'] as [$href, $label]): ?>
-                            <a class="sub<?= $path === $href ? ' active' : '' ?>" href="<?= e($href) ?>"><?= e($label) ?></a>
+                            <a class="subnav<?= $path === $href ? ' active' : '' ?>" href="<?= e($href) ?>"><?= e($label) ?></a>
                         <?php endforeach; ?>
                     </details>
                 <?php else:
