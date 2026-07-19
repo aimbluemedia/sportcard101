@@ -169,6 +169,136 @@ final class AiAnalyst
     }
 
     /**
+     * Assess bulk-lot auctions from their TITLES: how many cards, rough total
+     * value, and whether the current bid makes it worth a look. Returns a map
+     * keyed by ebay_item_id: verdict, est_card_count, est_value_low/high, reason.
+     *
+     * @param array<int,array<string,mixed>> $lots Each: ebay_item_id, title, price, bid_count, est_cards.
+     */
+    public function analyzeLots(array $lots): array
+    {
+        if (!$lots) {
+            return [];
+        }
+        $lots = array_slice($lots, 0, (int)($this->cfg['max_per_scan'] ?? 15));
+
+        if ($this->mock) {
+            return $this->heuristicLots($lots);
+        }
+
+        $system =
+            "You are a sports-card expert valuing eBay AUCTION LOTS of graded (mostly PSA) cards for a " .
+            "flipper, from the listing TITLE ONLY. Be conservative — titles oversell.\n\n" .
+            "For each lot:\n" .
+            "- est_card_count: cards in the lot (0 if the title doesn't say).\n" .
+            "- est_value_low / est_value_high: conservative USD resale range for the WHOLE lot if broken " .
+            "up and sold individually. Recognisable stars/rookies/low pop raise it; vague titles " .
+            "('mystery', 'random', unnamed players) mean assume near-floor commons (graded commons " .
+            "often resell for only \$10-20 each).\n" .
+            "- verdict vs the current bid: BUY (bid clearly below est_value_low, real margin after " .
+            "~13% fees and shipping on EVERY card when reselling), WATCH (borderline or needs the " .
+            "photos checked), PASS (fair, rich, or unknowable).\n" .
+            "- reason: ONE beginner-friendly sentence, name the key cards if any.\n" .
+            "Mystery/repack lots are gambling, not investing: verdict PASS.";
+
+        $schema = [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'required' => ['lots'],
+            'properties' => [
+                'lots' => [
+                    'type'  => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'additionalProperties' => false,
+                        'required' => ['ebay_item_id', 'verdict', 'est_card_count', 'est_value_low', 'est_value_high', 'reason'],
+                        'properties' => [
+                            'ebay_item_id'   => ['type' => 'string'],
+                            'verdict'        => ['type' => 'string', 'enum' => ['BUY', 'WATCH', 'PASS']],
+                            'est_card_count' => ['type' => 'integer'],
+                            'est_value_low'  => ['type' => 'number'],
+                            'est_value_high' => ['type' => 'number'],
+                            'reason'         => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $payload = array_map(fn ($l) => [
+            'ebay_item_id' => (string)$l['ebay_item_id'],
+            'title'        => (string)$l['title'],
+            'current_bid'  => (float)$l['price'],
+            'bid_count'    => $l['bid_count'],
+            'parsed_count' => $l['est_cards'],
+        ], $lots);
+
+        $body = [
+            'model'      => $this->cfg['model'] ?? 'claude-opus-4-8',
+            'max_tokens' => 3000,
+            'system'     => $system,
+            'output_config' => [
+                'format' => ['type' => 'json_schema', 'schema' => $schema],
+            ],
+            'messages' => [[
+                'role'    => 'user',
+                'content' => "Value these lot auctions:\n" . json_encode($payload, JSON_UNESCAPED_SLASHES),
+            ]],
+        ];
+
+        try {
+            $resp = $this->httpPost('https://api.anthropic.com/v1/messages', $body);
+        } catch (\Throwable $e) {
+            return $this->heuristicLots($lots);
+        }
+        $data = json_decode($resp, true);
+        $text = null;
+        foreach ($data['content'] ?? [] as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $text = $block['text'];
+                break;
+            }
+        }
+        $parsed = $text !== null ? json_decode($text, true) : null;
+        if (!is_array($parsed) || !isset($parsed['lots'])) {
+            return $this->heuristicLots($lots);
+        }
+        $byId = [];
+        foreach ($parsed['lots'] as $r) {
+            if (!empty($r['ebay_item_id'])) {
+                $byId[(string)$r['ebay_item_id']] = $r;
+            }
+        }
+        return $byId;
+    }
+
+    /** No-API fallback: floor-value lots at ~$12/card when the count is known. */
+    private function heuristicLots(array $lots): array
+    {
+        $out = [];
+        foreach ($lots as $l) {
+            $n     = (int) ($l['est_cards'] ?? 0);
+            $price = (float) $l['price'];
+            $low   = $n > 0 ? $n * 8.0 : 0.0;
+            $high  = $n > 0 ? $n * 18.0 : 0.0;
+            $verdict = 'PASS';
+            $reason  = 'Card count unclear from the title — open the photos to judge.';
+            if ($n > 0) {
+                $perCard = $price / max(1, $n);
+                $verdict = $perCard < 6.0 ? 'WATCH' : 'PASS';
+                $reason  = sprintf('~%d graded cards at $%.2f/card vs a rough $8–18/card floor — %s',
+                    $n, $perCard, $verdict === 'WATCH' ? 'cheap enough to inspect the photos.' : 'no obvious edge at this bid.');
+            }
+            $out[(string)$l['ebay_item_id']] = [
+                'verdict' => $verdict, 'est_card_count' => $n,
+                'est_value_low' => round($low, 2), 'est_value_high' => round($high, 2),
+                'reason' => $reason,
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Write the Morning Playbook narrative: a short market summary and an
      * optional coaching note per buy target. The plan's numbers (max bids,
      * margins) are computed deterministically by Playbook — the AI only adds

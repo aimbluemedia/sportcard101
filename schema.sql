@@ -270,3 +270,28 @@ CREATE TABLE IF NOT EXISTS trades (
     PRIMARY KEY (id),
     KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Bulk-lot auctions (own table — kept out of the singles/comps pipeline).
+-- Auto-created by LotFinder::ensureTable(); listed here for reference.
+CREATE TABLE IF NOT EXISTS lots (
+    id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    ebay_item_id  VARCHAR(64)  NOT NULL,
+    title         VARCHAR(512) NOT NULL,
+    price         DECIMAL(10,2) NOT NULL DEFAULT 0,
+    currency      VARCHAR(8)   NOT NULL DEFAULT 'USD',
+    bid_count     INT DEFAULT NULL,
+    end_time      DATETIME DEFAULT NULL,
+    image_url     VARCHAR(1024) DEFAULT NULL,
+    item_url      VARCHAR(1024) NOT NULL,
+    est_cards     INT DEFAULT NULL,
+    ai_verdict    VARCHAR(8)  DEFAULT NULL,
+    ai_est_low    DECIMAL(10,2) DEFAULT NULL,
+    ai_est_high   DECIMAL(10,2) DEFAULT NULL,
+    ai_reason     VARCHAR(512) DEFAULT NULL,
+    analyzed_at   DATETIME DEFAULT NULL,
+    first_seen_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_item (ebay_item_id),
+    KEY idx_end (end_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
