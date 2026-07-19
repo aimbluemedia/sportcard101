@@ -83,12 +83,13 @@ if ($task === 'daily') {
         $sent = false;
         $to   = trim((string) setting('notify_email', ''));
         if ($to !== '' && $plan) {
-            $sells   = Playbook::sellActions($pdo);
+            $sells    = Playbook::sellActions($pdo);
+            $morningLots = Playbook::morningLots($pdo);
             $subject = 'Morning Playbook — ' . date('D, M j') . ': '
                      . ($res['buys'] > 0 ? $res['buys'] . ' buy target' . ($res['buys'] === 1 ? '' : 's') : 'no qualified buys');
             $sent = Mailer::send($to, $subject,
-                Playbook::emailText($plan, $sells, $score),
-                Playbook::emailHtml($plan, $sells, $score));
+                Playbook::emailText($plan, $sells, $score, $morningLots),
+                Playbook::emailHtml($plan, $sells, $score, $morningLots));
         }
 
         echo "OK (daily playbook)\n";
@@ -118,10 +119,12 @@ try {
     $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions FIRST
     $graded   = Playbook::gradeClosed($pdo);   // then grade playbook picks (never blocks alerts)
 
-    // Bulk-lot sweep — best-effort, never allowed to break the scan.
+    // Bulk-lot sweep + BUY-lot alert email — best-effort, never breaks the scan.
     $lots = ['found' => 0, 'new' => 0, 'analyzed' => 0];
+    $lotAlerts = 0;
     try {
         $lots = LotFinder::scan($pdo, $ebay, $ai);
+        $lotAlerts = LotFinder::alert($pdo);
     } catch (\Throwable $e) {
         // lots are a bonus; ignore failures here
     }
@@ -139,7 +142,7 @@ try {
     echo "new sold comps:    {$recorded}\n";
     echo "picks graded:      {$graded}\n";
     echo "deal alerts sent:  " . count($alerts) . "\n";
-    echo "lots:              {$lots['found']} live ({$lots['new']} new, {$lots['analyzed']} valued)\n";
+    echo "lots:              {$lots['found']} live ({$lots['new']} new, {$lots['analyzed']} valued, {$lotAlerts} alerted)\n";
     echo "ebay mode:         " . ($ebay->isMock() ? 'mock (no keyset)' : 'live') . "\n";
     echo "took:              {$secs}s\n";
 } catch (\Throwable $e) {
