@@ -35,6 +35,7 @@ use SportCard101\AiAnalyst;
 use SportCard101\DealFinder;
 use SportCard101\Comps;
 use SportCard101\DealAlerts;
+use SportCard101\LotFinder;
 use SportCard101\Mailer;
 use SportCard101\Playbook;
 
@@ -117,6 +118,14 @@ try {
     $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions FIRST
     $graded   = Playbook::gradeClosed($pdo);   // then grade playbook picks (never blocks alerts)
 
+    // Bulk-lot sweep — best-effort, never allowed to break the scan.
+    $lots = ['found' => 0, 'new' => 0, 'analyzed' => 0];
+    try {
+        $lots = LotFinder::scan($pdo, $ebay, $ai);
+    } catch (\Throwable $e) {
+        // lots are a bonus; ignore failures here
+    }
+
     $secs = round(microtime(true) - $started, 1);
 
     // Heartbeat — lets the superadmin Settings page confirm cron is firing.
@@ -130,6 +139,7 @@ try {
     echo "new sold comps:    {$recorded}\n";
     echo "picks graded:      {$graded}\n";
     echo "deal alerts sent:  " . count($alerts) . "\n";
+    echo "lots:              {$lots['found']} live ({$lots['new']} new, {$lots['analyzed']} valued)\n";
     echo "ebay mode:         " . ($ebay->isMock() ? 'mock (no keyset)' : 'live') . "\n";
     echo "took:              {$secs}s\n";
 } catch (\Throwable $e) {
