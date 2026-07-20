@@ -530,22 +530,8 @@ final class Playbook
         return $line;
     }
 
-    /** Live BUY/WATCH lots for the morning email's bulk-lots section. */
-    public static function morningLots(PDO $pdo, int $limit = 5): array
-    {
-        try {
-            return $pdo->query(
-                "SELECT * FROM lots
-                 WHERE ai_verdict IN ('BUY','WATCH') AND end_time > UTC_TIMESTAMP()
-                 ORDER BY FIELD(ai_verdict,'BUY','WATCH'), end_time ASC LIMIT " . (int)$limit
-            )->fetchAll();
-        } catch (\Throwable $e) {
-            return []; // lots table not created yet
-        }
-    }
-
     /** Morning email, same visual system as the deal alerts. */
-    public static function emailHtml(array $plan, array $sells, ?array $scorecard = null, array $lots = []): string
+    public static function emailHtml(array $plan, array $sells, ?array $scorecard = null): string
     {
         $font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
         $buys  = array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'BUY'));
@@ -649,13 +635,7 @@ final class Playbook
             . ' &middot; planned exposure $' . number_format((float)$plan['exposure'], 2)
             . ' &middot; the max bid is a promise to yourself, not a suggestion.</p>'
             . '</td></tr>'
-            . $rows . $gemHtml . $watchHtml
-            . ($lots
-                ? '<tr><td style="padding:20px 28px 0;border-top:1px solid #e8e8ed">'
-                  . '<p style="margin:0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#86868b;' . $font . '">📦 Bulk lots worth a look</p>'
-                  . '</td></tr>' . LotFinder::emailRows($lots, $font)
-                : '')
-            . $sellHtml . $scoreHtml
+            . $rows . $gemHtml . $watchHtml . $sellHtml . $scoreHtml
             . '</table>'
             . '<p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#86868b;' . $font . '">'
             . 'Full detail and the trade log are on your Daily Plan dashboard.<br>'
@@ -664,7 +644,7 @@ final class Playbook
     }
 
     /** Plain-text fallback for the morning email. */
-    public static function emailText(array $plan, array $sells, ?array $scorecard = null, array $lots = []): string
+    public static function emailText(array $plan, array $sells, ?array $scorecard = null): string
     {
         $lines = ['MORNING PLAYBOOK — ' . date('l, M j', strtotime((string)$plan['plan_date'])), ''];
         $lines[] = (string) $plan['summary'];
@@ -699,17 +679,6 @@ final class Playbook
             $lines[] = 'WATCHLIST:';
             foreach ($watch as $t) {
                 $lines[] = "• {$t['card']} — {$t['reason']}";
-            }
-            $lines[] = '';
-        }
-        if ($lots) {
-            $lines[] = 'BULK LOTS WORTH A LOOK (verify photos before bidding):';
-            foreach ($lots as $l) {
-                $d = LotFinder::displayFields($l);
-                $lines[] = "• {$d['title']} — now {$d['price']}"
-                    . ($d['per_card'] !== null ? " ({$d['per_card']}/card)" : '')
-                    . ($d['est'] !== null ? ", est. value {$d['est']}" : '');
-                $lines[] = '  View on eBay: ' . $d['url'];
             }
             $lines[] = '';
         }

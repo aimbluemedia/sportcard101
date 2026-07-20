@@ -83,13 +83,20 @@ if ($task === 'daily') {
         $sent = false;
         $to   = trim((string) setting('notify_email', ''));
         if ($to !== '' && $plan) {
-            $sells    = Playbook::sellActions($pdo);
-            $morningLots = Playbook::morningLots($pdo);
+            $sells   = Playbook::sellActions($pdo);
             $subject = 'Morning Playbook — ' . date('D, M j') . ': '
                      . ($res['buys'] > 0 ? $res['buys'] . ' buy target' . ($res['buys'] === 1 ? '' : 's') : 'no qualified buys');
             $sent = Mailer::send($to, $subject,
-                Playbook::emailText($plan, $sells, $score, $morningLots),
-                Playbook::emailHtml($plan, $sells, $score, $morningLots));
+                Playbook::emailText($plan, $sells, $score),
+                Playbook::emailHtml($plan, $sells, $score));
+        }
+
+        // Bulk Auctions digest — its own email, so lots never crowd the playbook.
+        $lotDigest = 0;
+        try {
+            $lotDigest = LotFinder::dailyDigest($pdo);
+        } catch (\Throwable $e) {
+            // digest is a bonus; never break the daily task
         }
 
         echo "OK (daily playbook)\n";
@@ -100,6 +107,7 @@ if ($task === 'daily') {
         echo "picks graded: {$graded}\n";
         echo "ai narrative: {$res['ai']}\n";
         echo 'email:        ' . ($sent ? "sent to {$to}" : 'not sent') . "\n";
+        echo 'lot digest:   ' . ($lotDigest > 0 ? "{$lotDigest} lots emailed" : 'nothing worth a look') . "\n";
     } catch (\Throwable $e) {
         http_response_code(500);
         echo 'ERROR: ' . $e->getMessage() . "\n";

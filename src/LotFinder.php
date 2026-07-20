@@ -200,6 +200,47 @@ final class LotFinder
         return $n;
     }
 
+    /** Live lots worth surfacing (BUY first, then WATCH, ending soonest). */
+    public static function worthALook(PDO $pdo, int $limit = 8): array
+    {
+        try {
+            return $pdo->query(
+                "SELECT * FROM lots
+                 WHERE ai_verdict IN ('BUY','WATCH') AND end_time > UTC_TIMESTAMP()
+                 ORDER BY FIELD(ai_verdict,'BUY','WATCH'), end_time ASC LIMIT " . (int)$limit
+            )->fetchAll();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Plain-English buy recommendation for a lot. The suggested max is 55% of
+     * the LOW estimate — the haircut covers ~13% fees on every card, shipping
+     * each one, and the fact that title-based estimates oversell.
+     *
+     * @return array{max: ?float, label: string, tone: string} tone: buy|maybe|skip
+     */
+    public static function recommendation(array $l): array
+    {
+        $estLow = $l['ai_est_low'] !== null ? (float)$l['ai_est_low'] : 0.0;
+        $price  = (float) $l['price'];
+        if (($l['ai_verdict'] ?? null) === null || $estLow <= 0) {
+            return ['max' => null, 'label' => 'Not valued yet — wait for the next sweep.', 'tone' => 'skip'];
+        }
+        $max = floor($estLow * 0.55 * 100) / 100;
+        if ($l['ai_verdict'] === 'PASS' || $max < 10) {
+            return ['max' => null, 'label' => 'Skip — no edge at any realistic bid.', 'tone' => 'skip'];
+        }
+        if ($price > $max) {
+            return ['max' => $max, 'label' => sprintf('Already past our number — worth it only under $%s.', number_format($max, 2)), 'tone' => 'skip'];
+        }
+        if ($l['ai_verdict'] === 'BUY') {
+            return ['max' => $max, 'label' => sprintf('✅ Worth buying at ≤ $%s if the photos match the title.', number_format($max, 2)), 'tone' => 'buy'];
+        }
+        return ['max' => $max, 'label' => sprintf('🔍 Maybe — inspect the photos first; only bid at ≤ $%s.', number_format($max, 2)), 'tone' => 'maybe'];
+    }
+
     /** Fields both email formats share for one lot row. */
     public static function displayFields(array $l): array
     {
@@ -241,6 +282,11 @@ final class LotFinder
                 . ($d['reason'] !== ''
                     ? '<p style="margin:8px 0 0;font-size:12px;line-height:1.5;color:#86868b;' . $font . '">' . \e($d['reason']) . '</p>'
                     : '')
+                . (function () use ($l, $font): string {
+                    $rec = self::recommendation($l);
+                    $color = match ($rec['tone']) { 'buy' => '#1d7d46', 'maybe' => '#b8860b', default => '#6e6e73' };
+                    return '<p style="margin:8px 0 0;font-size:13px;font-weight:700;color:' . $color . ';' . $font . '">' . \e($rec['label']) . '</p>';
+                })()
                 . '<p style="margin:14px 0 0"><a href="' . \e($d['url']) . '" '
                 . 'style="display:inline-block;background:#0071e3;color:#ffffff;font-size:13px;font-weight:600;line-height:1;'
                 . 'padding:10px 20px;border-radius:980px;text-decoration:none;' . $font . '">View on eBay</a></p>'
@@ -249,13 +295,13 @@ final class LotFinder
         return $rows;
     }
 
-    /** Standalone alert email for BUY-verdict lots. */
-    public static function emailHtml(array $lots): string
+    /** Standalone lot email (30-min BUY alerts and the daily digest). */
+    public static function emailHtml(array $lots, string $heading = 'Bulk Lot Alerts', ?string $intro = null): string
     {
         $font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
         $n = count($lots);
-        $intro = $n . ' bulk lot' . ($n === 1 ? '' : 's') . ' where the current bid sits under the AI\'s break-up estimate. '
-               . 'Estimates come from titles only — inspect the photos before bidding.';
+        $intro = $intro ?? ($n . ' bulk lot' . ($n === 1 ? '' : 's') . ' where the current bid sits under the AI\'s break-up estimate. '
+               . 'Estimates come from titles only — inspect the photos before bidding.');
         return
             '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all">' . \e($intro) . '</div>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7">'
@@ -263,7 +309,7 @@ final class LotFinder
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:18px">'
             . '<tr><td style="padding:30px 28px 6px">'
             . '<p style="margin:0;font-size:21px;font-weight:700;letter-spacing:-0.3px;color:#1d1d1f;' . $font . '">SportCard101</p>'
-            . '<p style="margin:3px 0 0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#86868b;' . $font . '">Bulk Lot Alerts</p>'
+            . '<p style="margin:3px 0 0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#86868b;' . $font . '">' . \e($heading) . '</p>'
             . '</td></tr>'
             . '<tr><td style="padding:14px 28px 22px">'
             . '<p style="margin:0;font-size:14px;line-height:1.6;color:#1d1d1f;' . $font . '">' . \e($intro) . '</p>'
@@ -293,10 +339,36 @@ final class LotFinder
             if ($d['reason'] !== '') {
                 $lines[] = "  {$d['reason']}";
             }
+            $lines[] = '  ' . self::recommendation($l)['label'];
             $lines[] = "  View on eBay: {$d['url']}";
             $lines[] = '';
         }
         $lines[] = '— SportCard101 bulk lot alerts';
         return implode("\n", $lines);
+    }
+
+    /**
+     * The daily Bulk Auctions digest — its own email, separate from the
+     * Morning Playbook: every live BUY/WATCH lot with a buy recommendation.
+     * Returns the number of lots emailed (0 = nothing to send / not sent).
+     */
+    public static function dailyDigest(PDO $pdo): int
+    {
+        $to = trim((string) \setting('notify_email', ''));
+        if ($to === '') {
+            return 0;
+        }
+        $lots = self::worthALook($pdo, 8);
+        if (!$lots) {
+            return 0;
+        }
+        $n = count($lots);
+        $buys = count(array_filter($lots, fn ($l) => $l['ai_verdict'] === 'BUY'));
+        $subject = 'Bulk Auctions — ' . date('D, M j') . ': '
+                 . ($buys > 0 ? "{$buys} worth buying, " . ($n - $buys) . ' to inspect' : "{$n} to inspect");
+        $intro = 'Today\'s bulk-lot picture: ' . $n . ' live lot' . ($n === 1 ? '' : 's')
+               . ' worth your attention. Each has a hard number — bid at or under it after checking the photos, or walk.';
+        $ok = Mailer::send($to, $subject, self::emailText($lots), self::emailHtml($lots, 'Bulk Auctions · Daily Digest', $intro));
+        return $ok ? $n : 0;
     }
 }
