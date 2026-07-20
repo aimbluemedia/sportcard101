@@ -6,6 +6,7 @@ require __DIR__ . '/../src/layout.php';
 
 use SportCard101\Auth;
 use SportCard101\AiAnalyst;
+use SportCard101\LotFinder;
 use SportCard101\Playbook;
 
 Auth::requireAdmin();
@@ -96,6 +97,7 @@ foreach ($trades as $t) {
     }
 }
 
+$bulkLots = $ready ? LotFinder::worthALook($pdo, 8) : [];
 $buys     = $plan ? array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'BUY')) : [];
 $watchAll = $plan ? array_values(array_filter($plan['targets'], fn ($t) => $t['kind'] === 'WATCH')) : [];
 $gems     = array_values(array_filter($watchAll, fn ($t) => str_starts_with((string)$t['reason'], '💎')));
@@ -207,6 +209,35 @@ layout_header('Daily Plan', 'admin');
         </table></div>
     </div>
     <?php endif; ?>
+<?php endif; ?>
+
+<?php if ($bulkLots): ?>
+<div class="card" style="margin-bottom:16px">
+    <h2 style="margin-top:0">📦 Bulk Auctions (<?= count($bulkLots) ?>)</h2>
+    <p class="sub" style="margin-bottom:12px">Live graded-card lots the AI rates worth attention, with a hard recommendation. Full sweep on the <a href="/superadmin/lots.php">Lots page</a>.</p>
+    <div style="overflow-x:auto"><table>
+        <tr><th>Lot</th><th>Now</th><th>Bids</th><th>Ends</th><th>Cards</th><th>$ / card</th><th>Est. value</th><th>Recommendation</th><th></th></tr>
+        <?php foreach ($bulkLots as $l):
+            $hrs = hours_until((string)$l['end_time']);
+            $cards = $l['est_cards'] !== null ? (int)$l['est_cards'] : null;
+            $rec = LotFinder::recommendation($l);
+            $recColor = match ($rec['tone']) { 'buy' => '#1d7d46', 'maybe' => '#b8860b', default => 'var(--muted)' }; ?>
+        <tr>
+            <td style="max-width:340px"><strong><?= e((string)$l['title']) ?></strong>
+                <?php if ($l['ai_reason']): ?><br><small style="color:var(--muted)"><?= e((string)$l['ai_reason']) ?></small><?php endif; ?></td>
+            <td>$<?= number_format((float)$l['price'], 2) ?></td>
+            <td><?= $l['bid_count'] !== null ? (int)$l['bid_count'] : '—' ?></td>
+            <td><?= $hrs === null ? '—' : '~' . ($hrs >= 48 ? round($hrs / 24) . 'd' : round($hrs) . 'h') ?></td>
+            <td><?= $cards !== null ? $cards : '?' ?></td>
+            <td><?= ($cards && $cards > 0) ? '$' . number_format((float)$l['price'] / $cards, 2) : '—' ?></td>
+            <td><?= ($l['ai_est_low'] !== null && $l['ai_est_high'] !== null && (float)$l['ai_est_high'] > 0)
+                ? '$' . number_format((float)$l['ai_est_low'], 0) . '–$' . number_format((float)$l['ai_est_high'], 0) : '—' ?></td>
+            <td><strong style="color:<?= $recColor ?>"><?= e($rec['label']) ?></strong></td>
+            <td><a class="btn" href="<?= e(epn_link((string)$l['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a></td>
+        </tr>
+        <?php endforeach; ?>
+    </table></div>
+</div>
 <?php endif; ?>
 
 <?php if ($sells): ?>
