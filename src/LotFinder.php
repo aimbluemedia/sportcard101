@@ -189,7 +189,7 @@ final class LotFinder
             return 0;
         }
         $n = count($lots);
-        $subject = "SportCard101: {$n} bulk lot deal" . ($n === 1 ? '' : 's');
+        $subject = "SportCard101: {$n} lot alert" . ($n === 1 ? '' : 's');
         if (!Mailer::send($to, $subject, self::emailText($lots), self::emailHtml($lots))) {
             return 0; // next scan retries
         }
@@ -364,7 +364,7 @@ final class LotFinder
         }
         $n = count($lots);
         $buys = count(array_filter($lots, fn ($l) => $l['ai_verdict'] === 'BUY'));
-        $subject = 'Bulk Auctions — ' . date('D, M j') . ': '
+        $subject = 'SportCard101 Bulk Auctions — ' . date('D, M j') . ': '
                  . ($buys > 0 ? "{$buys} worth buying, " . ($n - $buys) . ' to inspect' : "{$n} to inspect");
         $intro = 'Today\'s bulk-lot picture: ' . $n . ' live lot' . ($n === 1 ? '' : 's')
                . ' worth your attention. Each has a hard number — bid at or under it after checking the photos, or walk.';
