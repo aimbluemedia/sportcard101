@@ -13,6 +13,20 @@ Auth::refresh($pdo);
 Inventory::ensureTables($pdo);
 $uid = Auth::userId();
 
+// Superadmin can switch which member's collection is shown; everyone else
+// only ever sees (and touches) their own. Defaults to the admin's own.
+$viewUid = $uid;
+$members = [];
+if (Auth::isAdmin()) {
+    $members = $pdo->query("SELECT id, username FROM users ORDER BY (role = 'superadmin') DESC, username ASC")->fetchAll();
+    $sel = (int)($_POST['member'] ?? ($_GET['member'] ?? 0));
+    if ($sel > 0 && in_array($sel, array_map('intval', array_column($members, 'id')), true)) {
+        $viewUid = $sel;
+    }
+}
+$back      = '/member/inventory.php' . ($viewUid !== $uid ? '?member=' . $viewUid : '');
+$hidMember = $viewUid !== $uid ? '<input type="hidden" name="member" value="' . (int)$viewUid . '">' : '';
+
 $SPORTS = card_sports();
 $GRADE_NUMS = card_grade_nums();
 
@@ -28,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name = trim((string)($_POST['card_name'] ?? ''));
         if ($name === '') {
             flash('error', 'Card name is required.');
-            redirect('/member/inventory.php');
+            redirect($back);
         }
         [$cardKey, $baseKey] = Inventory::keysFor($name);
         $company = in_array($_POST['grade_company'] ?? 'PSA', Inventory::COMPANIES, true) ? (string)$_POST['grade_company'] : 'PSA';
@@ -56,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     grade_company, grade, cert_number, card_cost, ship_cost, purchase_source, purchased_at, status,
                     location, image_url, notes, card_key, base_key)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-            )->execute([$uid, ...$vals]);
+            )->execute([$viewUid, ...$vals]);
             flash('success', 'Card added to your collection.');
         } else {
             $pdo->prepare(
@@ -64,21 +78,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     grade_company=?, grade=?, cert_number=?, card_cost=?, ship_cost=?, purchase_source=?, purchased_at=?,
                     status=?, location=?, image_url=?, notes=?, card_key=?, base_key=?
                  WHERE id=? AND user_id=?'
-            )->execute([...$vals, $id, $uid]);
+            )->execute([...$vals, $id, $viewUid]);
             flash('success', 'Card updated.');
         }
     } elseif ($action === 'to_grader') {
-        $pdo->prepare("UPDATE inventory SET status='AT_GRADER' WHERE id=? AND user_id=? AND status='RAW'")->execute([$id, $uid]);
+        $pdo->prepare("UPDATE inventory SET status='AT_GRADER' WHERE id=? AND user_id=? AND status='RAW'")->execute([$id, $viewUid]);
         flash('success', 'Marked as sent to the grader. 🤞');
     } elseif ($action === 'graded') {
         $grade = in_array($_POST['grade'] ?? '', $GRADE_NUMS, true) ? (string)$_POST['grade'] : null;
         $pdo->prepare("UPDATE inventory SET status='GRADED', grade=COALESCE(?, grade) WHERE id=? AND user_id=? AND status='AT_GRADER'")
-            ->execute([$grade, $id, $uid]);
+            ->execute([$grade, $id, $viewUid]);
         flash('success', 'Back from grading — congrats on the slab.');
     } elseif ($action === 'listed') {
         $price = $numOrNull('list_price');
         $pdo->prepare("UPDATE inventory SET status='LISTED', list_price=?, listed_at=CURDATE() WHERE id=? AND user_id=? AND status IN ('RAW','GRADED')")
-            ->execute([$price, $id, $uid]);
+            ->execute([$price, $id, $viewUid]);
         flash('success', 'Marked as listed.');
     } elseif ($action === 'sold') {
         $price = $numOrNull('sold_price');
@@ -87,14 +101,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $pdo->prepare("UPDATE inventory SET status='SOLD', sold_price=?, sold_fees=?, sold_ship=?, sold_at=CURDATE()
                            WHERE id=? AND user_id=? AND status <> 'SOLD'")
-                ->execute([$price, $numOrNull('sold_fees'), $numOrNull('sold_ship'), $id, $uid]);
+                ->execute([$price, $numOrNull('sold_fees'), $numOrNull('sold_ship'), $id, $viewUid]);
             flash('success', 'Sold — P&L updated. 🎉');
         }
     } elseif ($action === 'delete') {
-        $pdo->prepare('DELETE FROM inventory WHERE id=? AND user_id=?')->execute([$id, $uid]);
+        $pdo->prepare('DELETE FROM inventory WHERE id=? AND user_id=?')->execute([$id, $viewUid]);
         flash('success', 'Card removed.');
     }
-    redirect('/member/inventory.php');
+    redirect($back);
 }
 
 // ---- Data ------------------------------------------------------------------
@@ -102,7 +116,7 @@ $statusFilter = isset(Inventory::STATUSES[$_GET['status'] ?? '']) ? (string)$_GE
 $editing = null;
 if (isset($_GET['edit'])) {
     $stmt = $pdo->prepare('SELECT * FROM inventory WHERE id=? AND user_id=?');
-    $stmt->execute([(int)$_GET['edit'], $uid]);
+    $stmt->execute([(int)$_GET['edit'], $viewUid]);
     $editing = $stmt->fetch() ?: null;
 }
 
@@ -111,7 +125,7 @@ $stmt = $pdo->prepare(
     ($statusFilter !== 'all' ? ' AND status = ' . $pdo->quote($statusFilter) : '') .
     " ORDER BY status='SOLD', created_at DESC LIMIT 500"
 );
-$stmt->execute([$uid]);
+$stmt->execute([$viewUid]);
 $rows = Inventory::value($pdo, $stmt->fetchAll());
 $pf   = Inventory::portfolio($rows);
 
@@ -121,6 +135,26 @@ layout_header('My Collection', 'member');
 ?>
 <h1>🗃️ My Collection</h1>
 <p class="sub">Your cards, costs, and sales — valued live against SportCard101's sold-comp database. Quick-add takes 10 seconds; details can come later.</p>
+
+<?php if ($members): // superadmin only — switch which member's collection is shown
+    $viewName = '';
+    foreach ($members as $m) {
+        if ((int)$m['id'] === $viewUid) { $viewName = (string)$m['username']; break; }
+    } ?>
+<div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap<?= $viewUid !== $uid ? ';border-left:4px solid #e0a935' : '' ?>">
+    <strong>Viewing collection:</strong>
+    <form method="get" style="margin:0">
+        <select name="member" onchange="this.form.submit()">
+            <?php foreach ($members as $m): ?>
+                <option value="<?= (int)$m['id'] ?>"<?= (int)$m['id'] === $viewUid ? ' selected' : '' ?>><?= e((string)$m['username']) ?><?= (int)$m['id'] === $uid ? ' (you)' : '' ?></option>
+            <?php endforeach; ?>
+        </select>
+    </form>
+    <?php if ($viewUid !== $uid): ?>
+        <span style="color:#e0a935">⚠ You're managing <strong><?= e($viewName) ?></strong>'s collection — every change here affects their account.</span>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="card" style="margin-bottom:16px">
     <div style="display:flex;gap:26px;flex-wrap:wrap">
@@ -135,7 +169,7 @@ layout_header('My Collection', 'member');
 
 <div class="card" style="margin-bottom:16px">
     <h2 style="margin-top:0"><?= $editing ? 'Edit card' : 'Add a card' ?></h2>
-    <form method="post"><?= csrf_field() ?>
+    <form method="post"><?= csrf_field() . $hidMember ?>
         <input type="hidden" name="action" value="<?= $editing ? 'update' : 'add' ?>">
         <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int)$editing['id'] ?>"><?php endif; ?>
 
@@ -181,6 +215,7 @@ layout_header('My Collection', 'member');
 </div>
 
 <form method="get" class="searchbar" style="margin-bottom:12px">
+    <?php if ($viewUid !== $uid): ?><input type="hidden" name="member" value="<?= (int)$viewUid ?>"><?php endif; ?>
     <select name="status" onchange="this.form.submit()">
         <option value="all">All statuses</option>
         <?php foreach (Inventory::STATUSES as $k => $label): ?>
@@ -217,26 +252,26 @@ layout_header('My Collection', 'member');
             <td><?= e(Inventory::STATUSES[$r['status']] ?? $r['status']) ?><?= $r['status'] === 'LISTED' && $r['list_price'] !== null ? '<br><small style="color:var(--muted)">@ $' . number_format((float)$r['list_price'], 2) . '</small>' : '' ?></td>
             <td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                 <?php if ($r['status'] === 'RAW'): ?>
-                    <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="to_grader"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">Sent to grader</button></form>
+                    <form method="post" class="inline"><?= csrf_field() . $hidMember ?><input type="hidden" name="action" value="to_grader"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">Sent to grader</button></form>
                 <?php elseif ($r['status'] === 'AT_GRADER'): ?>
-                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() ?><input type="hidden" name="action" value="graded"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() . $hidMember ?><input type="hidden" name="action" value="graded"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                         <select name="grade" style="width:70px"><option value="">grade</option><?php foreach ($GRADE_NUMS as $g): ?><option value="<?= e($g) ?>"><?= e($g) ?></option><?php endforeach; ?></select>
                         <button class="btn btn-sm" type="submit">Came back</button></form>
                 <?php endif; ?>
                 <?php if (in_array($r['status'], ['RAW', 'GRADED'], true)): ?>
-                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() ?><input type="hidden" name="action" value="listed"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() . $hidMember ?><input type="hidden" name="action" value="listed"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                         <input name="list_price" type="number" step="0.01" min="0" placeholder="list $" style="width:80px">
                         <button class="btn btn-sm" type="submit">Listed</button></form>
                 <?php endif; ?>
                 <?php if ($r['status'] !== 'SOLD'): ?>
-                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() ?><input type="hidden" name="action" value="sold"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() . $hidMember ?><input type="hidden" name="action" value="sold"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                         <input name="sold_price" type="number" step="0.01" min="0.01" placeholder="sold $" style="width:80px">
                         <input name="sold_fees" type="number" step="0.01" min="0" placeholder="fees $" style="width:70px">
                         <input name="sold_ship" type="number" step="0.01" min="0" placeholder="ship $" style="width:70px">
                         <button class="btn btn-sm" type="submit">Sold</button></form>
                 <?php endif; ?>
-                <a class="btn btn-sm" href="/member/inventory.php?edit=<?= (int)$r['id'] ?>">Edit</a>
-                <form method="post" class="inline" onsubmit="return confirm('Remove this card?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">✕</button></form>
+                <a class="btn btn-sm" href="/member/inventory.php?edit=<?= (int)$r['id'] ?><?= $viewUid !== $uid ? '&member=' . (int)$viewUid : '' ?>">Edit</a>
+                <form method="post" class="inline" onsubmit="return confirm('Remove this card?')"><?= csrf_field() . $hidMember ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">✕</button></form>
             </div></td>
         </tr>
         <?php endforeach; ?>
