@@ -42,12 +42,12 @@ layout_header('Collections', 'admin');
 <p class="sub"><?= $totCards ?> cards cataloged across <?= $using ?> of <?= count($rows) ?> accounts · $<?= number_format($totInvested, 2) ?> invested (active cards). Members with 0 cards aren't using the stickiest feature — worth a nudge email.</p>
 
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-    <a class="btn btn-primary" href="/member/inventory.php">➕ Add / manage my cards</a>
+    <a class="btn btn-primary" href="/superadmin/mycards.php">➕ Add / manage my cards</a>
 </div>
 
 <div class="card">
     <div style="overflow-x:auto"><table>
-        <tr><th>Member</th><th>Plan status</th><th>Cards</th><th>Active</th><th>Invested</th><th>Sold</th><th>Realized P&amp;L</th><th></th></tr>
+        <tr><th>Member</th><th>Plan status</th><th>Cards</th><th>Active</th><th>Invested</th><th>Sold</th><th>Realized P&amp;L</th></tr>
         <?php foreach ($rows as $r): $rlz = (float)$r['realized']; ?>
         <tr>
             <td><strong><?= e((string)$r['username']) ?></strong><?= $r['role'] === 'superadmin' ? ' <small style="color:var(--muted)">(admin)</small>' : '' ?><br>
@@ -58,7 +58,6 @@ layout_header('Collections', 'admin');
             <td>$<?= number_format((float)$r['invested'], 2) ?></td>
             <td><?= (int)$r['sold_cards'] ?></td>
             <td><strong style="color:<?= $rlz >= 0 ? '#1d7d46' : '#e05555' ?>">$<?= number_format($rlz, 2) ?></strong></td>
-            <td><a class="btn btn-sm" href="/member/inventory.php?member=<?= (int)$r['id'] ?>"><?= $r['role'] === 'superadmin' ? 'Manage my cards' : 'View / manage' ?></a></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
