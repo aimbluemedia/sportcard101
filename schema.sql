@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS alert_triggers (
     active         TINYINT(1)   NOT NULL DEFAULT 1,
     sport          VARCHAR(32)  NOT NULL DEFAULT 'all',
     grade          VARCHAR(16)  NOT NULL DEFAULT 'any',
+    brand          VARCHAR(32)  NOT NULL DEFAULT 'all',
     signed         TINYINT(1)   NOT NULL DEFAULT 0,
     rookie         TINYINT(1)   NOT NULL DEFAULT 0,
     keywords       VARCHAR(190) DEFAULT NULL,

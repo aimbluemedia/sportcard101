@@ -31,6 +31,16 @@ if ($triggersReady) {
             // If ALTER is not permitted, run migrations/2026_trigger_rookie.sql manually.
         }
     }
+    // Self-migrate: card-company (brand) filter.
+    try {
+        $pdo->query('SELECT brand FROM alert_triggers LIMIT 1');
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE alert_triggers ADD COLUMN brand VARCHAR(32) NOT NULL DEFAULT 'all' AFTER grade");
+        } catch (\Throwable $e2) {
+            // If ALTER is not permitted, run migrations/2026_trigger_brand.sql manually.
+        }
+    }
 }
 
 /** Human summary of a trigger's conditions (also used to auto-name). */
@@ -39,6 +49,9 @@ function trigger_summary(array $t, array $sports): string
     $p = [];
     $p[] = ($t['sport'] ?? 'all') === 'all' ? 'Any sport' : ($sports[$t['sport']]['label'] ?? $t['sport']);
     $p[] = ($t['grade'] ?? 'any') === 'any' ? 'any PSA grade' : ('PSA ' . $t['grade']);
+    if (($t['brand'] ?? 'all') !== 'all') {
+        $p[] = card_brands()[$t['brand']]['label'] ?? $t['brand'];
+    }
     if (!empty($t['signed']))   $p[] = 'signed/auto';
     if (!empty($t['rookie']))   $p[] = 'rookie';
     if (!empty($t['keywords'])) $p[] = '“' . $t['keywords'] . '”';
@@ -113,6 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = [
             'sport'          => $sport,
             'grade'          => $grade,
+            'brand'          => isset(card_brands()[$_POST['brand'] ?? '']) ? (string)$_POST['brand'] : 'all',
             'signed'         => isset($_POST['signed']) ? 1 : 0,
             'rookie'         => isset($_POST['rookie']) ? 1 : 0,
             'keywords'       => trim((string)($_POST['keywords'] ?? '')) ?: null,
@@ -131,16 +145,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'add_trigger') {
             $pdo->prepare(
                 'INSERT INTO alert_triggers
-                    (label, active, sport, grade, signed, rookie, keywords, max_price, min_under_comp, require_comp, within_hours)
-                 VALUES (?,1,?,?,?,?,?,?,?,?,?)'
-            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['rookie'], $data['keywords'],
+                    (label, active, sport, grade, brand, signed, rookie, keywords, max_price, min_under_comp, require_comp, within_hours)
+                 VALUES (?,1,?,?,?,?,?,?,?,?,?,?)'
+            )->execute([$label, $data['sport'], $data['grade'], $data['brand'], $data['signed'], $data['rookie'], $data['keywords'],
                         $data['max_price'], $data['min_under_comp'], $data['require_comp'], $data['within_hours']]);
             flash('success', 'Trigger added.');
         } else {
             $pdo->prepare(
-                'UPDATE alert_triggers SET label=?, sport=?, grade=?, signed=?, rookie=?, keywords=?,
+                'UPDATE alert_triggers SET label=?, sport=?, grade=?, brand=?, signed=?, rookie=?, keywords=?,
                     max_price=?, min_under_comp=?, require_comp=?, within_hours=? WHERE id=?'
-            )->execute([$label, $data['sport'], $data['grade'], $data['signed'], $data['rookie'], $data['keywords'],
+            )->execute([$label, $data['sport'], $data['grade'], $data['brand'], $data['signed'], $data['rookie'], $data['keywords'],
                         $data['max_price'], $data['min_under_comp'], $data['require_comp'], $data['within_hours'],
                         (int)($_POST['id'] ?? 0)]);
             flash('success', 'Trigger updated.');
@@ -243,6 +257,12 @@ if ($alertErr !== ''): ?>
         <option value="any"<?= $fv('grade','any')==='any'?' selected':'' ?>>Any grade</option>
         <?php foreach ($GRADE_NUMS as $g): ?>
             <option value="<?= e($g) ?>"<?= $fv('grade')===$g?' selected':'' ?>>PSA <?= e($g) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <select name="brand" class="searchbar-select">
+        <option value="all"<?= $fv('brand','all')==='all'?' selected':'' ?>>All card companies</option>
+        <?php foreach (card_brands() as $bk => $b): ?>
+            <option value="<?= e($bk) ?>"<?= $fv('brand')===$bk?' selected':'' ?>><?= e($b['label']) ?></option>
         <?php endforeach; ?>
     </select>
     <input name="max_price" type="number" step="0.01" min="0" class="searchbar-input tb-num" value="<?= e($fv('max_price')) ?>" placeholder="Max $">

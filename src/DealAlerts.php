@@ -146,6 +146,10 @@ final class DealAlerts
         if (($t['grade'] ?? 'any') !== 'any' && strcasecmp((string)$r['grade'], 'PSA ' . $t['grade']) !== 0) {
             return false;
         }
+        // Card company / brand (matched against title incl. set-name variants).
+        if (($t['brand'] ?? 'all') !== 'all' && !\brand_matches($titleLc, (string)$t['brand'])) {
+            return false;
+        }
         // Signed / autograph.
         if (!empty($t['signed']) && !$isSigned) {
             return false;
