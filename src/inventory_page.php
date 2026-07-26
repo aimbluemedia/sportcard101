@@ -190,61 +190,91 @@ layout_header('My Collection', $INV_AREA);
     </select>
 </form>
 
+<?php
+$activeRows = array_values(array_filter($rows, fn ($r) => $r['status'] !== 'SOLD'));
+$soldRows   = array_values(array_filter($rows, fn ($r) => $r['status'] === 'SOLD'));
+?>
 <?php if (!$rows): ?>
     <div class="empty" style="padding:30px">No cards yet — add your first one above. Everything except the name is optional.</div>
-<?php else: ?>
-<div class="card">
+<?php endif; ?>
+
+<?php if ($activeRows): ?>
+<div class="card" style="margin-bottom:16px">
+    <h2 style="margin-top:0">📦 My cards (<?= count($activeRows) ?>)</h2>
     <div style="overflow-x:auto"><table>
-        <tr><th>Card</th><th>Grade</th><th>All-in cost</th><th>Est. value</th><th>Sold $</th><th>Sold date</th><th>Profit $</th><th>Status</th><th>Actions</th></tr>
-        <?php foreach ($rows as $r):
-            $allIn = Inventory::allIn($r);
-            $realized = Inventory::realized($r);
+        <tr><th style="min-width:220px">Card</th><th>Grade</th><th>All-in cost</th><th>Est. value</th><th>Paper P&amp;L</th><th>Status</th><th style="min-width:330px">Actions</th></tr>
+        <?php foreach ($activeRows as $r):
+            $allIn  = Inventory::allIn($r);
             $unreal = $r['live_value'] !== null ? (float)$r['live_value'] - $allIn : null; ?>
         <tr>
-            <td style="max-width:300px"><strong><?= e((string)$r['card_name']) ?></strong>
+            <td><strong><?= e((string)$r['card_name']) ?></strong>
                 <?php if ($r['location']): ?><br><small style="color:var(--muted)">📍 <?= e((string)$r['location']) ?></small><?php endif; ?></td>
-            <td><?= e($r['grade_company'] === 'RAW' ? 'Raw' : $r['grade_company'] . ' ' . (string)($r['grade'] ?? '?')) ?></td>
-            <td>$<?= number_format($allIn, 2) ?><br><small style="color:var(--muted)">$<?= number_format((float)$r['card_cost'], 2) ?> + $<?= number_format((float)$r['ship_cost'], 2) ?> ship</small></td>
-            <td><?php if ($r['live_value'] !== null): ?>
+            <td style="white-space:nowrap"><?= e($r['grade_company'] === 'RAW' ? 'Raw' : $r['grade_company'] . ' ' . (string)($r['grade'] ?? '?')) ?></td>
+            <td style="white-space:nowrap">$<?= number_format($allIn, 2) ?><br><small style="color:var(--muted)">$<?= number_format((float)$r['card_cost'], 2) ?> + $<?= number_format((float)$r['ship_cost'], 2) ?> ship</small></td>
+            <td style="white-space:nowrap"><?php if ($r['live_value'] !== null): ?>
                     <strong>$<?= number_format((float)$r['live_value'], 2) ?></strong> <small style="color:var(--muted)">(<?= (int)$r['live_comp_count'] ?> sales)</small><br>
-                    <small><a href="<?= e(ebay_sold_link((string)$r['card_name'])) ?>" target="_blank" rel="noopener">recent sold prices ›</a></small>
-                <?php elseif ($r['status'] === 'SOLD'): ?>—
+                    <small><a href="<?= e(ebay_sold_link((string)$r['card_name'])) ?>" target="_blank" rel="noopener">sold prices ›</a></small>
                 <?php else: ?><span style="color:var(--muted)">not enough sales yet</span><?php endif; ?></td>
-            <td><?php if ($r['sold_price'] !== null): ?>
-                    <strong>$<?= number_format((float)$r['sold_price'], 2) ?></strong>
-                    <?php if ((float)($r['sold_fees'] ?? 0) > 0 || (float)($r['sold_ship'] ?? 0) > 0): ?>
-                        <br><small style="color:var(--muted)">-$<?= number_format((float)($r['sold_fees'] ?? 0) + (float)($r['sold_ship'] ?? 0), 2) ?> fees+ship</small>
+            <td style="white-space:nowrap"><?= $unreal !== null
+                ? '<strong style="color:' . ($unreal >= 0 ? '#1d7d46' : '#e05555') . '">$' . number_format($unreal, 2) . '</strong>'
+                : '—' ?></td>
+            <td style="white-space:nowrap"><?= e(Inventory::STATUSES[$r['status']] ?? $r['status']) ?><?= $r['status'] === 'LISTED' && $r['list_price'] !== null ? '<br><small style="color:var(--muted)">@ $' . number_format((float)$r['list_price'], 2) . '</small>' : '' ?></td>
+            <td>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+                    <?php if ($r['status'] === 'RAW'): ?>
+                        <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="to_grader"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">Sent to grader</button></form>
+                    <?php elseif ($r['status'] === 'AT_GRADER'): ?>
+                        <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() ?><input type="hidden" name="action" value="graded"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <select name="grade" style="width:70px"><option value="">grade</option><?php foreach ($GRADE_NUMS as $g): ?><option value="<?= e($g) ?>"><?= e($g) ?></option><?php endforeach; ?></select>
+                            <button class="btn btn-sm" type="submit">Came back</button></form>
                     <?php endif; ?>
-                <?php else: ?>—<?php endif; ?></td>
-            <td><?= $r['sold_at'] !== null ? e(date('M j, Y', strtotime((string)$r['sold_at']))) : '—' ?></td>
-            <td><?php if ($realized !== null): ?>
-                    <strong style="color:<?= $realized >= 0 ? '#1d7d46' : '#e05555' ?>">$<?= number_format($realized, 2) ?></strong>
-                <?php elseif ($unreal !== null): ?>
-                    <strong style="color:<?= $unreal >= 0 ? '#1d7d46' : '#e05555' ?>">$<?= number_format($unreal, 2) ?></strong> <small style="color:var(--muted)">paper</small>
-                <?php else: ?>—<?php endif; ?></td>
-            <td><?= e(Inventory::STATUSES[$r['status']] ?? $r['status']) ?><?= $r['status'] === 'LISTED' && $r['list_price'] !== null ? '<br><small style="color:var(--muted)">@ $' . number_format((float)$r['list_price'], 2) . '</small>' : '' ?></td>
-            <td><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                <?php if ($r['status'] === 'RAW'): ?>
-                    <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="to_grader"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">Sent to grader</button></form>
-                <?php elseif ($r['status'] === 'AT_GRADER'): ?>
-                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() ?><input type="hidden" name="action" value="graded"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                        <select name="grade" style="width:70px"><option value="">grade</option><?php foreach ($GRADE_NUMS as $g): ?><option value="<?= e($g) ?>"><?= e($g) ?></option><?php endforeach; ?></select>
-                        <button class="btn btn-sm" type="submit">Came back</button></form>
-                <?php endif; ?>
-                <?php if (in_array($r['status'], ['RAW', 'GRADED'], true)): ?>
-                    <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() ?><input type="hidden" name="action" value="listed"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                        <input name="list_price" type="number" step="0.01" min="0" placeholder="list $" style="width:80px">
-                        <button class="btn btn-sm" type="submit">Listed</button></form>
-                <?php endif; ?>
-                <?php if ($r['status'] !== 'SOLD'): ?>
-                    <form method="post" class="inline" style="display:flex;gap:4px;flex-wrap:wrap"><?= csrf_field() ?>
-                        <input type="hidden" name="action" value="sold"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                        <input name="sold_price" type="number" step="0.01" min="0.01" placeholder="sold $" style="width:80px">
-                        <input name="sold_fees" type="number" step="0.01" min="0" placeholder="fees $" style="width:70px">
-                        <input name="sold_ship" type="number" step="0.01" min="0" placeholder="ship $" style="width:70px">
-                        <input name="sold_at" type="date" title="Sold date (defaults to today)" style="width:130px">
-                        <button class="btn btn-sm" type="submit">Sold</button></form>
-                <?php endif; ?>
+                    <?php if (in_array($r['status'], ['RAW', 'GRADED'], true)): ?>
+                        <form method="post" class="inline" style="display:flex;gap:4px"><?= csrf_field() ?><input type="hidden" name="action" value="listed"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <input name="list_price" type="number" step="0.01" min="0" placeholder="list $" style="width:80px">
+                            <button class="btn btn-sm" type="submit">Listed</button></form>
+                    <?php endif; ?>
+                    <a class="btn btn-sm" href="<?= e($INV_SELF) ?>?edit=<?= (int)$r['id'] ?>">Edit</a>
+                    <form method="post" class="inline" onsubmit="return confirm('Remove this card?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">✕</button></form>
+                </div>
+                <form method="post" style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:0"><?= csrf_field() ?>
+                    <input type="hidden" name="action" value="sold"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                    <input name="sold_price" type="number" step="0.01" min="0.01" placeholder="sold $" style="width:82px">
+                    <input name="sold_fees" type="number" step="0.01" min="0" placeholder="fees $" style="width:72px">
+                    <input name="sold_ship" type="number" step="0.01" min="0" placeholder="ship $" style="width:72px">
+                    <input name="sold_at" type="date" title="Sold date (blank = today)" style="width:135px">
+                    <button class="btn btn-sm btn-primary" type="submit">Mark sold</button>
+                </form>
+            </td>
+        </tr>
+        <?php endforeach; ?>
+    </table></div>
+</div>
+<?php endif; ?>
+
+<?php if ($soldRows):
+    $soldProfit = 0.0;
+    foreach ($soldRows as $r) { $soldProfit += Inventory::realized($r) ?? 0.0; } ?>
+<div class="card" style="margin-bottom:16px">
+    <h2 style="margin-top:0">✅ Sold (<?= count($soldRows) ?>)
+        <small style="color:var(--muted);font-weight:400">— total profit:
+        <strong style="color:<?= $soldProfit >= 0 ? '#1d7d46' : '#e05555' ?>">$<?= number_format($soldProfit, 2) ?></strong></small></h2>
+    <div style="overflow-x:auto"><table>
+        <tr><th style="min-width:220px">Card</th><th>Grade</th><th>All-in cost</th><th>Sold $</th><th>Fees + ship</th><th>Sold date</th><th>Profit $</th><th></th></tr>
+        <?php foreach ($soldRows as $r):
+            $allIn    = Inventory::allIn($r);
+            $realized = Inventory::realized($r);
+            $deduct   = (float)($r['sold_fees'] ?? 0) + (float)($r['sold_ship'] ?? 0); ?>
+        <tr>
+            <td><strong><?= e((string)$r['card_name']) ?></strong></td>
+            <td style="white-space:nowrap"><?= e($r['grade_company'] === 'RAW' ? 'Raw' : $r['grade_company'] . ' ' . (string)($r['grade'] ?? '?')) ?></td>
+            <td style="white-space:nowrap">$<?= number_format($allIn, 2) ?></td>
+            <td style="white-space:nowrap"><strong><?= $r['sold_price'] !== null ? '$' . number_format((float)$r['sold_price'], 2) : '—' ?></strong></td>
+            <td style="white-space:nowrap"><?= $deduct > 0 ? '-$' . number_format($deduct, 2) : '$0.00' ?></td>
+            <td style="white-space:nowrap"><?= $r['sold_at'] !== null ? e(date('M j, Y', strtotime((string)$r['sold_at']))) : '—' ?></td>
+            <td style="white-space:nowrap"><?= $realized !== null
+                ? '<strong style="color:' . ($realized >= 0 ? '#1d7d46' : '#e05555') . ';font-size:1.05rem">$' . number_format($realized, 2) . '</strong>'
+                : '—' ?></td>
+            <td><div style="display:flex;gap:6px">
                 <a class="btn btn-sm" href="<?= e($INV_SELF) ?>?edit=<?= (int)$r['id'] ?>">Edit</a>
                 <form method="post" class="inline" onsubmit="return confirm('Remove this card?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$r['id'] ?>"><button class="btn btn-sm" type="submit">✕</button></form>
             </div></td>
