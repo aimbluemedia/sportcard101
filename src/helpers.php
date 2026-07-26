@@ -190,6 +190,42 @@ function card_sports(): array
     ];
 }
 
+/**
+ * Card manufacturers for trigger filtering: key => [label, title-match terms].
+ * Match terms cover common set names that appear WITHOUT the brand (e.g.
+ * "Prizm" listings rarely say "Panini"; "OPC" instead of "O-Pee-Chee").
+ */
+function card_brands(): array
+{
+    return [
+        'topps'      => ['label' => 'Topps',      'match' => ['topps']],
+        'panini'     => ['label' => 'Panini',     'match' => ['panini', 'prizm', 'mosaic', 'select', 'optic', 'obsidian', 'contenders', 'chronicles', 'immaculate', 'national treasures']],
+        'bowman'     => ['label' => 'Bowman',     'match' => ['bowman']],
+        'upper-deck' => ['label' => 'Upper Deck', 'match' => ['upper deck']],
+        'fleer'      => ['label' => 'Fleer',      'match' => ['fleer']],
+        'donruss'    => ['label' => 'Donruss',    'match' => ['donruss']],
+        'o-pee-chee' => ['label' => 'O-Pee-Chee', 'match' => ['o-pee-chee', 'o pee chee', 'opc']],
+        'leaf'       => ['label' => 'Leaf',       'match' => ['leaf']],
+        'score'      => ['label' => 'Score',      'match' => ['score']],
+        'futera'     => ['label' => 'Futera',     'match' => ['futera']],
+    ];
+}
+
+/** Does a lowercased listing title match a card_brands() key? */
+function brand_matches(string $titleLc, string $brandKey): bool
+{
+    $brand = card_brands()[$brandKey] ?? null;
+    if ($brand === null) {
+        return true; // unknown/all — no constraint
+    }
+    foreach ($brand['match'] as $term) {
+        if (str_contains($titleLc, $term)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Grading companies: code (used in the eBay query) => display label. */
 function card_companies(): array
 {
