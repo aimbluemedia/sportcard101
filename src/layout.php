@@ -19,7 +19,7 @@ function nav_links(string $area): array
         'admin' => [
             ['/superadmin/', 'Dashboard'],
             ['group' => '🗃️ My Collection', 'items' => [
-                ['/member/inventory.php', 'My Cards'],
+                ['/superadmin/mycards.php', 'My Cards'],
                 ['/superadmin/dailyplan.php', 'Daily Plan'],
                 ['/superadmin/collections.php', 'Collections'],
             ]],
