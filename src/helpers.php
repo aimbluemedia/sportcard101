@@ -226,6 +226,84 @@ function brand_matches(string $titleLc, string $brandKey): bool
     return false;
 }
 
+/**
+ * Hall of Fame players by sport — the most-collected inductees, lowercase,
+ * matched against listing titles. Curated, not exhaustive: extend freely.
+ * (Active greats who aren't inducted yet — LeBron, Brady — are excluded
+ * by definition; add them the day they're enshrined.)
+ */
+function hof_players(): array
+{
+    return [
+        'baseball' => [
+            'babe ruth', 'lou gehrig', 'mickey mantle', 'willie mays', 'hank aaron', 'ted williams',
+            'joe dimaggio', 'jackie robinson', 'roberto clemente', 'stan musial', 'ty cobb', 'honus wagner',
+            'cy young', 'walter johnson', 'sandy koufax', 'bob gibson', 'nolan ryan', 'cal ripken',
+            'tony gwynn', 'griffey', 'derek jeter', 'mariano rivera', 'randy johnson', 'pedro martinez',
+            'greg maddux', 'tom seaver', 'johnny bench', 'yogi berra', 'roy campanella', 'frank robinson',
+            'ernie banks', 'harmon killebrew', 'reggie jackson', 'rickey henderson', 'wade boggs',
+            'george brett', 'mike schmidt', 'rod carew', 'carl yastrzemski', 'ozzie smith', 'david ortiz',
+            'ichiro', 'adrian beltre', 'joe mauer', 'chipper jones', 'vladimir guerrero', 'jim thome',
+            'frank thomas', 'jeff bagwell', 'craig biggio', 'satchel paige', 'josh gibson',
+        ],
+        'basketball' => [
+            'michael jordan', 'kobe bryant', 'shaquille', 'kareem abdul', 'magic johnson', 'larry bird',
+            'wilt chamberlain', 'bill russell', 'julius erving', 'hakeem olajuwon', 'tim duncan',
+            'kevin garnett', 'dirk nowitzki', 'dwyane wade', 'paul pierce', 'ray allen', 'allen iverson',
+            'steve nash', 'jason kidd', 'gary payton', 'scottie pippen', 'charles barkley', 'karl malone',
+            'john stockton', 'david robinson', 'patrick ewing', 'isiah thomas', 'dominique wilkins',
+            'oscar robertson', 'jerry west', 'elgin baylor', 'moses malone', 'dennis rodman',
+            'tracy mcgrady', 'vince carter', 'pau gasol', 'tony parker', 'manu ginobili', 'yao ming',
+            'chris bosh', 'dwight howard', 'carmelo anthony',
+        ],
+        'football' => [
+            'jerry rice', 'joe montana', 'walter payton', 'barry sanders', 'emmitt smith', 'jim brown',
+            'johnny unitas', 'dan marino', 'john elway', 'brett favre', 'peyton manning', 'calvin johnson',
+            'randy moss', 'terrell owens', 'deion sanders', 'ray lewis', 'ed reed', 'troy polamalu',
+            'brian urlacher', 'lawrence taylor', 'dick butkus', 'gale sayers', 'ladainian tomlinson',
+            'steve young', 'kurt warner', 'tony gonzalez', 'shannon sharpe', 'michael irvin',
+            'marshall faulk', 'curtis martin', 'jerome bettis', 'franco harris', 'terry bradshaw',
+            'roger staubach', 'bart starr', 'joe namath', 'warren moon', 'steve largent', 'champ bailey',
+            'charles woodson', 'darrelle revis', 'julius peppers', 'dwight freeney', 'devin hester',
+            'andre johnson', 'antonio gates', 'jared allen', 'sterling sharpe',
+        ],
+        'hockey' => [
+            'wayne gretzky', 'gordie howe', 'bobby orr', 'mario lemieux', 'maurice richard',
+            'jean beliveau', 'bobby hull', 'brett hull', 'mark messier', 'steve yzerman', 'joe sakic',
+            'patrick roy', 'martin brodeur', 'dominik hasek', 'jaromir jagr', 'guy lafleur',
+            'phil esposito', 'ray bourque', 'nicklas lidstrom', 'teemu selanne', 'pavel bure',
+            'sergei fedorov', 'peter forsberg', 'mats sundin', 'luc robitaille', 'jarome iginla',
+            'daniel alfredsson', 'alexander mogilny',
+        ],
+        'golf' => [
+            'jack nicklaus', 'arnold palmer', 'tiger woods', 'gary player', 'ben hogan', 'sam snead',
+            'bobby jones', 'tom watson', 'phil mickelson', 'seve ballesteros', 'byron nelson',
+            'walter hagen', 'gene sarazen', 'lee trevino', 'nick faldo', 'annika sorenstam',
+        ],
+    ];
+}
+
+/**
+ * Is this (lowercased) title a Hall of Famer's card? Checks the sport's HOF
+ * name list (all sports when unknown), plus literal "HOF" / "hall of fame".
+ */
+function is_hof_title(string $titleLc, ?string $sport = null): bool
+{
+    if (preg_match('/\bhof\b/', $titleLc) || str_contains($titleLc, 'hall of fame')) {
+        return true;
+    }
+    $lists = hof_players();
+    $pools = ($sport !== null && isset($lists[$sport])) ? [$lists[$sport]] : array_values($lists);
+    foreach ($pools as $names) {
+        foreach ($names as $name) {
+            if (str_contains($titleLc, $name)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /** Grading companies: code (used in the eBay query) => display label. */
 function card_companies(): array
 {
