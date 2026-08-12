@@ -40,6 +40,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? "{$added} draft(s) added below — review each one before publishing. Low-confidence entries are listed first."
                 : 'The AI returned no entries it was confident about. Try a specific sport, or add entries manually.');
         }
+    } elseif ($action === 'explain_candidate') {
+        // "Learn more" on a scan-history candidate: Claude explains the error
+        // behind the listing title and it lands as a draft for review.
+        $title = trim((string)($_POST['title'] ?? ''));
+        $ai = new AiAnalyst($config['ai']);
+        if ($ai->isMock()) {
+            flash('error', 'No Anthropic API key configured — add one in config.php to explain errors.');
+        } elseif ($title === '') {
+            flash('error', 'Nothing to explain.');
+        } else {
+            $res = $ai->explainErrors([['ref' => 'c1', 'title' => $title]]);
+            if (!$res || !isset($res['c1'])) {
+                flash('error', 'The AI could not produce an explanation for that listing. Try another, or add it manually.');
+            } else {
+                $newId = ErrorCards::insert($pdo, $res['c1'] + ['source' => 'MINED', 'status' => 'DRAFT']);
+                flash('success', 'Explained and added to your review queue — check the details below before publishing.');
+                redirect('/superadmin/errorcards.php?edit=' . $newId);
+            }
+        }
+    } elseif ($action === 'explain_missing') {
+        // Backfill: explain catalog entries that have no write-up yet.
+        $ai = new AiAnalyst($config['ai']);
+        if ($ai->isMock()) {
+            flash('error', 'No Anthropic API key configured — add one in config.php to explain errors.');
+        } else {
+            $todo = $pdo->query(
+                "SELECT id, error_name, year, set_name, player, card_number FROM error_cards
+                 WHERE (description IS NULL OR description = '' OR what_to_look_for IS NULL OR what_to_look_for = '')
+                   AND status <> 'REJECTED'
+                 ORDER BY id ASC LIMIT 10"
+            )->fetchAll();
+            if (!$todo) {
+                flash('success', 'Every entry already has an explanation.');
+            } else {
+                $ask = array_map(fn ($r) => [
+                    'ref'   => (string)$r['id'],
+                    'title' => trim(($r['year'] ?? '') . ' ' . ($r['set_name'] ?? '') . ' ' . ($r['player'] ?? '')
+                             . ' ' . ($r['card_number'] ? '#' . $r['card_number'] : '') . ' — ' . $r['error_name']),
+                ], $todo);
+                $res = $ai->explainErrors($ask);
+                $upd = $pdo->prepare(
+                    'UPDATE error_cards SET description = COALESCE(NULLIF(description,""), ?),
+                        what_to_look_for = COALESCE(NULLIF(what_to_look_for,""), ?),
+                        premium_note = COALESCE(NULLIF(premium_note,""), ?),
+                        rarity_note = COALESCE(NULLIF(rarity_note,""), ?),
+                        search_terms = COALESCE(NULLIF(search_terms,""), ?),
+                        slab_label = COALESCE(NULLIF(slab_label,""), ?),
+                        confidence = COALESCE(confidence, ?)
+                     WHERE id = ?'
+                );
+                $done = 0;
+                foreach ($todo as $r) {
+                    $e = $res[(string)$r['id']] ?? null;
+                    if (!$e) {
+                        continue;
+                    }
+                    $upd->execute([
+                        $e['description'] ?? null, $e['what_to_look_for'] ?? null,
+                        $e['premium_note'] ?? null, $e['rarity_note'] ?? null,
+                        $e['search_terms'] ?? null, $e['slab_label'] ?? null,
+                        isset($e['confidence']) ? (int)$e['confidence'] : null,
+                        (int)$r['id'],
+                    ]);
+                    $done++;
+                }
+                $left = (int) $pdo->query(
+                    "SELECT COUNT(*) FROM error_cards
+                     WHERE (description IS NULL OR description = '' OR what_to_look_for IS NULL OR what_to_look_for = '')
+                       AND status <> 'REJECTED'"
+                )->fetchColumn();
+                flash($done ? 'success' : 'error', $done
+                    ? "Explained {$done} entr" . ($done === 1 ? 'y' : 'ies') . '.' . ($left > 0 ? " {$left} still missing — run it again." : '')
+                    : 'The AI returned no explanations. Try again in a moment.');
+            }
+        }
     } elseif ($action === 'save') {
         $fields = [
             'error_name' => $s('error_name') ?? 'Untitled error',
@@ -54,12 +129,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'rarity_note' => $s('rarity_note'), 'image_url' => $s('image_url'),
             'search_terms' => $s('search_terms'),
         ];
+        // Auto-explain: fill any blank write-up fields with a Claude explanation.
+        $explained = false;
+        if (!empty($_POST['ai_explain'])
+            && ($fields['description'] === null || $fields['what_to_look_for'] === null)) {
+            $ai = new AiAnalyst($config['ai']);
+            if (!$ai->isMock()) {
+                $ref = trim(($fields['year'] ?? '') . ' ' . ($fields['set_name'] ?? '') . ' ' . ($fields['player'] ?? '')
+                     . ' ' . ($fields['card_number'] ? '#' . $fields['card_number'] : '') . ' — ' . $fields['error_name']);
+                $res = $ai->explainErrors([['ref' => 'e1', 'title' => $ref]]);
+                if (isset($res['e1'])) {
+                    $e = $res['e1'];
+                    foreach (['description', 'what_to_look_for', 'premium_note', 'rarity_note', 'search_terms', 'slab_label'] as $k) {
+                        if (($fields[$k] ?? null) === null && !empty($e[$k])) {
+                            $fields[$k] = $e[$k];
+                            $explained = true;
+                        }
+                    }
+                }
+            }
+        }
+
         if ($id > 0) {
             $sql = 'UPDATE error_cards SET ' . implode(', ', array_map(fn ($k) => "$k = ?", array_keys($fields))) . ' WHERE id = ?';
             $pdo->prepare($sql)->execute([...array_values($fields), $id]);
-            flash('success', 'Entry saved.');
+            flash('success', 'Entry saved.' . ($explained ? ' Blank fields were filled in by AI — review them.' : ''));
         } else {
-            ErrorCards::insert($pdo, $fields + ['source' => 'MANUAL', 'status' => 'PUBLISHED']);
+            // AI-assisted entries start as drafts so the write-up gets reviewed.
+            $newId = ErrorCards::insert($pdo, $fields + [
+                'source' => 'MANUAL',
+                'status' => $explained ? 'DRAFT' : 'PUBLISHED',
+            ]);
+            if ($explained) {
+                flash('success', 'Entry added with an AI explanation — review it below, then publish.');
+                redirect('/superadmin/errorcards.php?edit=' . $newId);
+            }
             flash('success', 'Entry added and published.');
         }
     } elseif ($action === 'publish') {
@@ -126,6 +230,20 @@ layout_header('Error Cards', 'admin');
         <button class="btn btn-primary" type="submit">Draft entries with AI</button>
         <span style="color:var(--muted)"><small>Already catalogued entries are excluded so drafts don't repeat.</small></span>
     </form>
+    <?php
+    $missing = (int) $pdo->query(
+        "SELECT COUNT(*) FROM error_cards
+         WHERE (description IS NULL OR description = '' OR what_to_look_for IS NULL OR what_to_look_for = '')
+           AND status <> 'REJECTED'"
+    )->fetchColumn();
+    if ($missing > 0): ?>
+    <form method="post" style="margin-top:12px" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Explaining…';">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="explain_missing">
+        <button class="btn" type="submit">✍️ Explain <?= $missing > 10 ? 'the next 10' : "all {$missing}" ?> entr<?= $missing === 1 ? 'y' : 'ies' ?> missing a write-up</button>
+        <span style="color:var(--muted);margin-left:8px"><small><?= $missing ?> entr<?= $missing === 1 ? 'y has' : 'ies have' ?> no description or identification note.</small></span>
+    </form>
+    <?php endif; ?>
     <p style="margin:12px 0 0;color:var(--muted)"><small>⚠️ AI-drafted facts need verification — card numbers, which version is scarcer, and premiums are all easy to get subtly wrong. Each entry reports its own confidence, and the lowest scores are listed first below. Spot-check against a sold-listings search before publishing.</small></p>
 </div>
 
@@ -199,18 +317,22 @@ layout_header('Error Cards', 'admin');
                 <?php foreach (ErrorCards::SCARCER as $k => $label): ?><option value="<?= e($k) ?>"<?= ($editing['scarcer'] ?? '') === $k ? ' selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
             </select></div>
             <div><label style="display:flex;gap:6px;align-items:center;margin-top:22px"><input type="checkbox" name="corrected_exists" value="1" <?= !empty($editing['corrected_exists']) ? 'checked' : '' ?>> Corrected version exists</label></div>
-            <div style="grid-column:1/-1"><label>Description</label><input name="description" value="<?= $fv('description') ?>" placeholder="What the error is"></div>
-            <div style="grid-column:1/-1"><label>What to look for</label><input name="what_to_look_for" value="<?= $fv('what_to_look_for') ?>" placeholder="The physical check — where on the card, and what the normal version shows"></div>
+            <div style="grid-column:1/-1"><label>Description</label><textarea name="description" rows="3" style="width:100%" placeholder="What the error is"><?= $fv('description') ?></textarea></div>
+            <div style="grid-column:1/-1"><label>What to look for</label><textarea name="what_to_look_for" rows="3" style="width:100%" placeholder="The physical check — where on the card, and what the normal version shows"><?= $fv('what_to_look_for') ?></textarea></div>
             <div><label>Slab label</label><input name="slab_label" value="<?= $fv('slab_label') ?>" placeholder="PSA: 'NNOF'"></div>
             <div><label>Premium vs base</label><input name="premium_note" value="<?= $fv('premium_note') ?>" placeholder="Many times the base card"></div>
             <div><label>Rarity</label><input name="rarity_note" value="<?= $fv('rarity_note') ?>" placeholder="Turns up a few times a month"></div>
             <div style="grid-column:1/-1"><label>Search terms (comma separated, lowercase)</label><input name="search_terms" value="<?= $fv('search_terms') ?>" placeholder="nnof, no name on front, no name"></div>
             <div style="grid-column:1/-1"><label>Image URL</label><input name="image_url" value="<?= $fv('image_url') ?>" placeholder="https://…"></div>
         </div>
-        <div style="margin-top:14px;display:flex;gap:8px">
-            <button class="btn btn-primary" type="submit"><?= $editing ? 'Save entry' : 'Add + publish' ?></button>
+        <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary" type="submit"><?= $editing ? 'Save entry' : 'Add entry' ?></button>
             <?php if ($editing): ?><a class="btn" href="/superadmin/errorcards.php">Cancel</a><?php endif; ?>
+            <label style="display:flex;gap:6px;align-items:center;color:var(--muted)">
+                <input type="checkbox" name="ai_explain" value="1" checked> 🤖 Explain blank fields with AI
+            </label>
         </div>
+        <p style="margin:8px 0 0;color:var(--muted)"><small>With AI explanation on, the entry is saved as a <strong>draft</strong> so you can check the write-up before it goes public. Fill a field in yourself and the AI leaves it alone.</small></p>
     </form>
 </div>
 
@@ -250,10 +372,19 @@ layout_header('Error Cards', 'admin');
         <tr>
             <td style="max-width:520px"><?= e((string)$m['title']) ?></td>
             <td style="white-space:nowrap">$<?= number_format((float)$m['price'], 2) ?></td>
-            <td><a class="btn btn-sm" href="<?= e(epn_link((string)$m['item_url'])) ?>" target="_blank" rel="noopener">View</a></td>
+            <td><div style="display:flex;gap:6px">
+                <a class="btn btn-sm" href="<?= e(epn_link((string)$m['item_url'])) ?>" target="_blank" rel="noopener">View</a>
+                <form method="post" class="inline" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Explaining…';">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="explain_candidate">
+                    <input type="hidden" name="title" value="<?= e((string)$m['title']) ?>">
+                    <button class="btn btn-sm btn-primary" type="submit" title="Ask AI what this error is, and add it to the review queue">Learn more</button>
+                </form>
+            </div></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
+    <p style="margin:12px 0 0;color:var(--muted)"><small>"Learn more" asks Claude what the error is and files the explanation in your review queue. If it doesn't recognise an obscure one it will say so and score itself low rather than guess.</small></p>
 </div>
 <?php endif; ?>
 <?php
