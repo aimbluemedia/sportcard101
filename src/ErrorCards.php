@@ -235,6 +235,154 @@ final class ErrorCards
     }
 
     /**
+     * Live tracked auctions that match a published catalog entry. Shared by
+     * Snap Shot, the member library pages, and the alert email.
+     *
+     * @param bool $unalertedOnly only auctions not yet emailed about
+     */
+    public static function liveMatches(PDO $pdo, int $limit = 600, bool $unalertedOnly = false): array
+    {
+        $entries = self::published($pdo, null, null, null, 500);
+        if (!$entries) {
+            return [];
+        }
+        self::ensureListingFlag($pdo);
+        try {
+            $listings = $pdo->query(
+                'SELECT l.id, l.title, l.price, l.bid_count, l.end_time, l.item_url
+                 FROM listings l
+                 WHERE l.end_time > UTC_TIMESTAMP()'
+                . ($unalertedOnly ? ' AND l.error_notified = 0' : '')
+                . ' ORDER BY l.end_time ASC LIMIT ' . (int)$limit
+            )->fetchAll();
+        } catch (\Throwable $e) {
+            return [];
+        }
+        return self::matchListings($pdo, $listings, $entries);
+    }
+
+    /** Add the error-alert de-dupe flag to listings (idempotent). */
+    public static function ensureListingFlag(PDO $pdo): void
+    {
+        try {
+            $pdo->query('SELECT error_notified FROM listings LIMIT 1');
+        } catch (\Throwable $e) {
+            try {
+                $pdo->exec('ALTER TABLE listings ADD COLUMN error_notified TINYINT(1) NOT NULL DEFAULT 0 AFTER notified');
+            } catch (\Throwable $e2) {
+                // If ALTER is blocked, alerts simply re-send; nothing breaks.
+            }
+        }
+    }
+
+    /**
+     * Email newly-spotted possible error cards. Same discipline as the deal
+     * alerts: listings are only marked notified after a successful send, so a
+     * mail failure retries on the next scan instead of losing the alert.
+     * Returns the number of matches emailed.
+     */
+    public static function alert(PDO $pdo): int
+    {
+        if ((string) \setting('notify_enabled', '0') !== '1') {
+            return 0;
+        }
+        $to = trim((string) \setting('notify_email', ''));
+        if ($to === '') {
+            return 0;
+        }
+        $hits = array_slice(self::liveMatches($pdo, 600, true), 0, 10);
+        if (!$hits) {
+            return 0;
+        }
+        $n = count($hits);
+        $subject = "SportCard101: {$n} possible error card" . ($n === 1 ? '' : 's');
+        if (!Mailer::send($to, $subject, self::emailText($hits), self::emailHtml($hits))) {
+            return 0; // next scan retries
+        }
+        $mark = $pdo->prepare('UPDATE listings SET error_notified = 1 WHERE id = ?');
+        foreach ($hits as $h) {
+            if (isset($h['listing']['id'])) {
+                $mark->execute([(int)$h['listing']['id']]);
+            }
+        }
+        return $n;
+    }
+
+    /** Alert email — house style, with the identification check front and centre. */
+    public static function emailHtml(array $hits): string
+    {
+        $font = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+        $n = count($hits);
+        $intro = $n . ' live auction' . ($n === 1 ? '' : 's') . ' may be a known error card. '
+               . 'A title match is a lead, not proof — run the check below against the photos before bidding.';
+
+        $rows = '';
+        foreach ($hits as $h) {
+            $l = $h['listing'];
+            $e = $h['error'];
+            $hrs = \hours_until((string)($l['end_time'] ?? ''));
+            $ends = $hrs === null ? '' : ' &middot; ends in ~' . ($hrs >= 48 ? round($hrs / 24) . ' days' : round($hrs) . 'h');
+            $rows .=
+                '<tr><td style="padding:22px 28px;border-top:1px solid #e8e8ed">'
+                . '<p style="margin:0;font-size:13px;font-weight:700;color:#b8860b;' . $font . '">' . \e((string)$e['error_name']) . '</p>'
+                . '<p style="margin:6px 0 0;font-size:15px;line-height:1.4;font-weight:600;color:#1d1d1f;' . $font . '">' . \e((string)$l['title']) . '</p>'
+                . '<p style="margin:6px 0 0;font-size:13px;line-height:1.4;color:#6e6e73;' . $font . '">Now '
+                . '<span style="font-weight:600;color:#1d1d1f">$' . number_format((float)$l['price'], 2) . '</span>'
+                . ' &middot; ' . (int)($l['bid_count'] ?? 0) . ' bids' . $ends . '</p>'
+                . (trim((string)($e['what_to_look_for'] ?? '')) !== ''
+                    ? '<p style="margin:10px 0 0;font-size:12px;line-height:1.5;color:#86868b;' . $font . '">'
+                      . '<strong style="color:#1d1d1f">Check:</strong> ' . \e((string)$e['what_to_look_for']) . '</p>'
+                    : '')
+                . '<p style="margin:14px 0 0"><a href="' . \e(\epn_link((string)$l['item_url'])) . '" '
+                . 'style="display:inline-block;background:#0071e3;color:#ffffff;font-size:13px;font-weight:600;line-height:1;'
+                . 'padding:10px 20px;border-radius:980px;text-decoration:none;' . $font . '">View on eBay</a>'
+                . ' &nbsp; <a href="https://sportcard101.com/errors.php?card=' . \e((string)$e['slug']) . '" '
+                . 'style="font-size:12px;color:#0071e3;text-decoration:none;' . $font . '">full identification guide &rsaquo;</a></p>'
+                . '</td></tr>';
+        }
+
+        return
+            '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all">' . \e($intro) . '</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7">'
+            . '<tr><td align="center" style="padding:32px 16px">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;background:#ffffff;border-radius:18px">'
+            . '<tr><td style="padding:30px 28px 6px">'
+            . '<p style="margin:0;font-size:21px;font-weight:700;letter-spacing:-0.3px;color:#1d1d1f;' . $font . '">SportCard101</p>'
+            . '<p style="margin:3px 0 0;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#86868b;' . $font . '">Possible Error Cards</p>'
+            . '</td></tr>'
+            . '<tr><td style="padding:14px 28px 22px">'
+            . '<p style="margin:0;font-size:14px;line-height:1.6;color:#1d1d1f;' . $font . '">' . \e($intro) . '</p>'
+            . '</td></tr>'
+            . $rows
+            . '</table>'
+            . '<p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#86868b;' . $font . '">'
+            . 'Full library on your Error Cards dashboard.<br>&copy; ' . date('Y') . ' SportCard101</p>'
+            . '</td></tr></table>';
+    }
+
+    /** Plain-text fallback for the error alert email. */
+    public static function emailText(array $hits): string
+    {
+        $n = count($hits);
+        $lines = ["{$n} possible error card" . ($n === 1 ? '' : 's') . ' spotted (verify against the photos before bidding):', ''];
+        foreach ($hits as $h) {
+            $l = $h['listing'];
+            $e = $h['error'];
+            $lines[] = "• {$e['error_name']}";
+            $lines[] = "  {$l['title']}";
+            $lines[] = '  Now $' . number_format((float)$l['price'], 2) . ' · ' . (int)($l['bid_count'] ?? 0) . ' bids';
+            if (trim((string)($e['what_to_look_for'] ?? '')) !== '') {
+                $lines[] = "  Check: {$e['what_to_look_for']}";
+            }
+            $lines[] = '  View on eBay: ' . \epn_link((string)$l['item_url']);
+            $lines[] = '  Guide: https://sportcard101.com/errors.php?card=' . $e['slug'];
+            $lines[] = '';
+        }
+        $lines[] = '— SportCard101 error card alerts';
+        return implode("\n", $lines);
+    }
+
+    /**
      * Candidate errors hiding in scan history: listing titles that advertise
      * an error/variation. Free discovery from data already collected.
      */
