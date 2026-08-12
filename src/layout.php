@@ -25,6 +25,7 @@ function nav_links(string $area): array
             ]],
             ['group' => '🔨 Auction', 'items' => [
                 ['/superadmin/auctions.php', 'Auctions'],
+                ['/superadmin/errorcards.php', 'Error Cards'],
                 ['/superadmin/snapshot.php', 'Snap Shot'],
                 ['/superadmin/lots.php', 'Lots'],
                 ['/superadmin/highbids.php', 'High Bids'],
@@ -42,13 +43,14 @@ function nav_links(string $area): array
         default => [
             ['/', 'Home'],
             ['/#features', 'Features'],
+            ['/errors.php', 'Error Cards'],
             ['/#pricing', 'Pricing'],
             ['/login.php', 'Log in'],
         ],
     };
 }
 
-function layout_header(string $title, string $area = 'public'): void
+function layout_header(string $title, string $area = 'public', ?string $metaDescription = null): void
 {
     $home = $area === 'admin' ? '/superadmin/' : ($area === 'member' ? '/member/' : '/');
     // Logged-in areas use a left sidebar; the public homepage keeps the top bar.
@@ -61,6 +63,9 @@ function layout_header(string $title, string $area = 'public'): void
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= e($title) ?> · SportCard101</title>
+    <?php if ($metaDescription !== null): ?>
+    <meta name="description" content="<?= e(mb_substr($metaDescription, 0, 300)) ?>">
+    <?php endif; ?>
     <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body class="area-<?= e($area) ?><?= $sidebar ? ' has-sidebar' : '' ?>">

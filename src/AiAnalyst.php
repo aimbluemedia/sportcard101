@@ -299,6 +299,121 @@ final class AiAnalyst
     }
 
     /**
+     * Draft error-card catalog entries for admin review. Deliberately
+     * conservative: the model is told to cover only errors it is confident
+     * are real, to report a confidence score, and to skip anything it would
+     * be guessing at — every entry lands as a DRAFT for human verification.
+     *
+     * @param string   $sport    sport key or 'all'
+     * @param int      $count    how many entries to attempt
+     * @param string[] $existing already-catalogued summaries, to avoid repeats
+     * @return array<int,array<string,mixed>>
+     */
+    public function draftErrorCards(string $sport, int $count, array $existing = []): array
+    {
+        if ($this->mock) {
+            return [];
+        }
+        $count = max(1, min(15, $count));
+
+        $system =
+            "You are a sports-card error and variation expert building a reference catalog for collectors " .
+            "who flip cards. Draft entries for WELL-DOCUMENTED error cards — the ones actually known in the " .
+            "hobby, where an informed collector could verify your description.\n\n" .
+            "CRITICAL: accuracy matters far more than volume. If you are not confident a specific error is " .
+            "real and that your details (year, set, card number, what the error is) are correct, DO NOT " .
+            "include it. Returning fewer, solid entries is the correct behaviour. Never invent a card.\n\n" .
+            "For each entry:\n" .
+            "- error_name: the hobby's name for it (e.g. 'No Name on Front (NNOF)').\n" .
+            "- error_type: one of photo, name, stats, missing, color, print, cut, foil, serial, auto_relic, back, other.\n" .
+            "- description: what the error IS, in two plain sentences.\n" .
+            "- what_to_look_for: the physical check a collector performs to identify it. Be specific and " .
+            "practical — where on the card to look, and what the correct version shows instead. This is the " .
+            "most valuable field.\n" .
+            "- corrected_exists: true if a corrected version was issued.\n" .
+            "- scarcer: ERROR, CORRECTED, or UNKNOWN — which version is harder to find.\n" .
+            "- slab_label: how PSA/BGS/SGC typically designate it on the flip, if they do. Empty if unsure.\n" .
+            "- premium_note: rough value relative to the normal card, in words (e.g. 'several times the base " .
+            "card in high grade'). Do NOT state specific dollar prices — they go stale.\n" .
+            "- rarity_note: how commonly it turns up.\n" .
+            "- search_terms: 3-6 lowercase comma-separated phrases that would appear in an eBay title for " .
+            "this variant (e.g. 'nnof, no name on front, no name'). Used to flag live listings.\n" .
+            "- confidence: 0-100, how sure you are this entry is accurate in every detail. Be honest; low " .
+            "scores are useful because a human reviews these.";
+
+        $schema = [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'required' => ['entries'],
+            'properties' => [
+                'entries' => [
+                    'type'  => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'additionalProperties' => false,
+                        'required' => [
+                            'error_name', 'sport', 'year', 'set_name', 'card_number', 'player', 'error_type',
+                            'description', 'what_to_look_for', 'corrected_exists', 'scarcer', 'slab_label',
+                            'premium_note', 'rarity_note', 'search_terms', 'confidence',
+                        ],
+                        'properties' => [
+                            'error_name'       => ['type' => 'string'],
+                            'sport'            => ['type' => 'string', 'enum' => ['baseball', 'basketball', 'football', 'hockey', 'golf']],
+                            'year'             => ['type' => 'string'],
+                            'set_name'         => ['type' => 'string'],
+                            'card_number'      => ['type' => 'string'],
+                            'player'           => ['type' => 'string'],
+                            'error_type'       => ['type' => 'string', 'enum' => array_keys(ErrorCards::TYPES)],
+                            'description'      => ['type' => 'string'],
+                            'what_to_look_for' => ['type' => 'string'],
+                            'corrected_exists' => ['type' => 'boolean'],
+                            'scarcer'          => ['type' => 'string', 'enum' => ['ERROR', 'CORRECTED', 'UNKNOWN']],
+                            'slab_label'       => ['type' => 'string'],
+                            'premium_note'     => ['type' => 'string'],
+                            'rarity_note'      => ['type' => 'string'],
+                            'search_terms'     => ['type' => 'string'],
+                            'confidence'       => ['type' => 'integer'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $ask = $sport === 'all'
+            ? "Draft up to {$count} famous error cards across baseball, basketball, football and hockey."
+            : "Draft up to {$count} famous {$sport} error cards.";
+        if ($existing) {
+            $ask .= "\n\nAlready in the catalog — do NOT repeat these:\n- " . implode("\n- ", array_slice($existing, 0, 200));
+        }
+
+        $body = [
+            'model'      => $this->cfg['model'] ?? 'claude-opus-4-8',
+            'max_tokens' => 8000,
+            'system'     => $system,
+            'output_config' => [
+                'format' => ['type' => 'json_schema', 'schema' => $schema],
+            ],
+            'messages' => [['role' => 'user', 'content' => $ask]],
+        ];
+
+        try {
+            $resp = $this->httpPost('https://api.anthropic.com/v1/messages', $body);
+        } catch (\Throwable $e) {
+            return [];
+        }
+        $data = json_decode($resp, true);
+        $text = null;
+        foreach ($data['content'] ?? [] as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $text = $block['text'];
+                break;
+            }
+        }
+        $parsed = $text !== null ? json_decode($text, true) : null;
+        return (is_array($parsed) && isset($parsed['entries'])) ? $parsed['entries'] : [];
+    }
+
+    /**
      * Write the Morning Playbook narrative: a short market summary and an
      * optional coaching note per buy target. The plan's numbers (max bids,
      * margins) are computed deterministically by Playbook — the AI only adds
