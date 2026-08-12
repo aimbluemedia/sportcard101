@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 csrf_verify();
 
 $ebay   = new EbayClient(ebay_config($config['ebay']));
-$ai     = new AiAnalyst($config['ai']);
+$ai     = new AiAnalyst(ai_config($config['ai']));
 $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 $uid = Auth::userId();
 

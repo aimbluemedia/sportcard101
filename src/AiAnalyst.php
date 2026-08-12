@@ -36,6 +36,54 @@ final class AiAnalyst
         return $this->mock;
     }
 
+    /** Model currently in use (for display in Settings). */
+    public function model(): string
+    {
+        return (string) ($this->cfg['model'] ?? 'claude-opus-4-8');
+    }
+
+    /**
+     * Verify the API key and model with a minimal round-trip.
+     * @return array{0:bool,1:string} [ok, human-readable message]
+     */
+    public function testConnection(): array
+    {
+        if ($this->mock) {
+            return [false, 'No API key set — running in mock mode (heuristics only, no AI).'];
+        }
+        $body = [
+            'model'      => $this->model(),
+            'max_tokens' => 16,
+            'messages'   => [['role' => 'user', 'content' => 'Reply with the single word: ok']],
+        ];
+        try {
+            $resp = $this->httpPost('https://api.anthropic.com/v1/messages', $body);
+        } catch (\Throwable $e) {
+            $msg = $e->getMessage();
+            if (str_contains($msg, '401') || stripos($msg, 'authentication') !== false) {
+                return [false, 'Key rejected (401) — check the API key.'];
+            }
+            if (str_contains($msg, '404') || stripos($msg, 'not_found') !== false) {
+                return [false, 'Model "' . $this->model() . '" not found for this account — check the model ID.'];
+            }
+            if (str_contains($msg, '429')) {
+                return [false, 'Rate limited (429) — the key works, but you are at your limit right now.'];
+            }
+            if (str_contains($msg, '400') && stripos($msg, 'credit') !== false) {
+                return [false, 'Key valid but the account has no credit balance.'];
+            }
+            return [false, 'Request failed: ' . mb_substr($msg, 0, 200)];
+        }
+        $data = json_decode($resp, true);
+        $usage = $data['usage'] ?? [];
+        return [true, sprintf(
+            'Connected — model %s responded (%d in / %d out tokens).',
+            $data['model'] ?? $this->model(),
+            (int)($usage['input_tokens'] ?? 0),
+            (int)($usage['output_tokens'] ?? 0)
+        )];
+    }
+
     /**
      * Assess a batch of deal-candidate listings.
      *
