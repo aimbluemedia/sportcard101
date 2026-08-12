@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $newId = ErrorCards::insert($pdo, $res['c1'] + ['source' => 'MINED', 'status' => 'DRAFT']);
                 flash('success', 'Explained and added to your review queue — check the details below before publishing.');
-                redirect('/superadmin/errorcards.php?edit=' . $newId);
+                redirect('/superadmin/errorcards.php?edit=' . $newId . '#manual');
             }
         }
     } elseif ($action === 'explain_missing') {
@@ -162,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             if ($explained) {
                 flash('success', 'Entry added with an AI explanation — review it below, then publish.');
-                redirect('/superadmin/errorcards.php?edit=' . $newId);
+                redirect('/superadmin/errorcards.php?edit=' . $newId . '#manual');
             }
             flash('success', 'Entry added and published.');
         }
@@ -268,7 +268,7 @@ layout_header('Error Cards', 'admin');
         </small></p>
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
             <a class="btn btn-sm" href="<?= e(ebay_sold_link(trim(($d['year'] ?? '') . ' ' . ($d['player'] ?? '') . ' ' . ($d['error_name'] ?? '')))) ?>" target="_blank" rel="noopener">Verify on eBay sold ›</a>
-            <a class="btn btn-sm" href="/superadmin/errorcards.php?edit=<?= (int)$d['id'] ?>">Edit</a>
+            <a class="btn btn-sm" href="/superadmin/errorcards.php?edit=<?= (int)$d['id'] ?>#manual">Edit</a>
             <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="publish"><input type="hidden" name="id" value="<?= (int)$d['id'] ?>"><button class="btn btn-sm btn-primary" type="submit">Publish</button></form>
             <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="reject"><input type="hidden" name="id" value="<?= (int)$d['id'] ?>"><button class="btn btn-sm" type="submit">Reject</button></form>
         </div>
@@ -297,7 +297,8 @@ layout_header('Error Cards', 'admin');
 <?php endif; ?>
 
 <div class="card" style="margin-bottom:16px">
-    <h2 style="margin-top:0"><?= $editing ? 'Edit entry' : 'Add an entry manually' ?></h2>
+    <details class="form-toggle" id="manual"<?= $editing ? ' open' : '' ?>>
+    <summary class="btn btn-primary"><?= $editing ? '✏️ Editing entry — click to collapse' : '➕ Add an entry manually' ?></summary>
     <form method="post"><?= csrf_field() ?>
         <input type="hidden" name="action" value="save">
         <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int)$editing['id'] ?>"><?php endif; ?>
@@ -334,6 +335,7 @@ layout_header('Error Cards', 'admin');
         </div>
         <p style="margin:8px 0 0;color:var(--muted)"><small>With AI explanation on, the entry is saved as a <strong>draft</strong> so you can check the write-up before it goes public. Fill a field in yourself and the AI leaves it alone.</small></p>
     </form>
+    </details>
 </div>
 
 <div class="card" style="margin-bottom:16px">
@@ -352,7 +354,7 @@ layout_header('Error Cards', 'admin');
             <td><small style="color:var(--muted)"><?= e((string)($er['search_terms'] ?? '—')) ?></small></td>
             <td><div style="display:flex;gap:6px">
                 <a class="btn btn-sm" href="/errors.php?card=<?= e((string)$er['slug']) ?>" target="_blank">View</a>
-                <a class="btn btn-sm" href="/superadmin/errorcards.php?edit=<?= (int)$er['id'] ?>">Edit</a>
+                <a class="btn btn-sm" href="/superadmin/errorcards.php?edit=<?= (int)$er['id'] ?>#manual">Edit</a>
                 <form method="post" class="inline"><?= csrf_field() ?><input type="hidden" name="action" value="unpublish"><input type="hidden" name="id" value="<?= (int)$er['id'] ?>"><button class="btn btn-sm" type="submit">Unpublish</button></form>
                 <form method="post" class="inline" onsubmit="return confirm('Delete this entry?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="<?= (int)$er['id'] ?>"><button class="btn btn-sm" type="submit">✕</button></form>
             </div></td>
