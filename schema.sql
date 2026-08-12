@@ -350,3 +350,37 @@ CREATE TABLE IF NOT EXISTS inventory_snapshots (
     UNIQUE KEY uniq_user_day (user_id, snap_date),
     CONSTRAINT fk_snap_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Error-card catalog. Powers the public library at /errors.php and the
+-- live-listing error detector. Auto-created by ErrorCards::ensureTable().
+-- Entries start as DRAFT (AI-drafted or mined) and only appear publicly
+-- once an admin reviews and PUBLISHes them.
+CREATE TABLE IF NOT EXISTS error_cards (
+    id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    slug             VARCHAR(190) NOT NULL,
+    error_name       VARCHAR(190) NOT NULL,
+    sport            VARCHAR(32)  DEFAULT NULL,
+    year             VARCHAR(10)  DEFAULT NULL,
+    set_name         VARCHAR(120) DEFAULT NULL,
+    card_number      VARCHAR(40)  DEFAULT NULL,
+    player           VARCHAR(120) DEFAULT NULL,
+    error_type       VARCHAR(20)  NOT NULL DEFAULT 'other',
+    description      TEXT DEFAULT NULL,
+    what_to_look_for TEXT DEFAULT NULL,
+    corrected_exists TINYINT(1) NOT NULL DEFAULT 0,
+    scarcer          VARCHAR(12) NOT NULL DEFAULT 'UNKNOWN',
+    slab_label       VARCHAR(190) DEFAULT NULL,
+    premium_note     VARCHAR(255) DEFAULT NULL,
+    rarity_note      VARCHAR(255) DEFAULT NULL,
+    image_url        VARCHAR(1024) DEFAULT NULL,
+    search_terms     VARCHAR(500) DEFAULT NULL,
+    confidence       TINYINT UNSIGNED DEFAULT NULL,
+    source           VARCHAR(10) NOT NULL DEFAULT 'MANUAL',
+    status           ENUM('DRAFT','PUBLISHED','REJECTED') NOT NULL DEFAULT 'DRAFT',
+    views            INT UNSIGNED NOT NULL DEFAULT 0,
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uniq_slug (slug),
+    KEY idx_status (status, sport)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
