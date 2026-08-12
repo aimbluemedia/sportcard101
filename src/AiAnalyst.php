@@ -414,6 +414,121 @@ final class AiAnalyst
     }
 
     /**
+     * Explain specific error cards — from a listing title, or from a catalog
+     * entry that's missing its write-up. Batched: one API call explains up to
+     * ~10 cards. Returns a map keyed by the caller's 'ref'.
+     *
+     * The model is told to admit ignorance rather than invent: many scan-history
+     * titles reference obscure regional or one-off errors, and a confident
+     * fabrication is far worse than "couldn't identify this one".
+     *
+     * @param array<int,array{ref:string,title:string}> $cards
+     * @return array<string,array<string,mixed>>
+     */
+    public function explainErrors(array $cards): array
+    {
+        if (!$cards || $this->mock) {
+            return [];
+        }
+        $cards = array_slice($cards, 0, 10);
+
+        $system =
+            "You are a sports-card error and variation expert. For each card reference given (usually a raw " .
+            "eBay listing title), explain the error it refers to for a collector who has never seen it.\n\n" .
+            "HONESTY REQUIREMENT: many listings reference obscure, regional, or one-off errors. If you do not " .
+            "genuinely recognise the specific error, say so plainly in the description (e.g. 'This appears to " .
+            "reference a variation in the 1990 Pro Set football set, but I can't confirm the specific error " .
+            "from the title alone — verify against a known example'), give whatever general guidance is " .
+            "genuinely useful, and set confidence LOW (under 40). Never invent a card number, a print-run " .
+            "story, or a value. An honest 'I can't confirm this' is a correct and useful answer.\n\n" .
+            "Fields:\n" .
+            "- error_name: the hobby's name for the error, or a plain description if it has no established name.\n" .
+            "- error_type: one of photo, name, stats, missing, color, print, cut, foil, serial, auto_relic, back, other.\n" .
+            "- description: 2-3 plain sentences on what the error IS and why collectors care.\n" .
+            "- what_to_look_for: the physical check to identify it — where on the card to look and what the " .
+            "normal version shows instead. If you can't be specific, say what a collector should compare against.\n" .
+            "- corrected_exists / scarcer (ERROR|CORRECTED|UNKNOWN): use UNKNOWN when unsure.\n" .
+            "- slab_label: how graders designate it, empty if unsure.\n" .
+            "- premium_note: value relative to the base card IN WORDS. Never state dollar amounts.\n" .
+            "- rarity_note: how often it turns up.\n" .
+            "- search_terms: 3-6 lowercase comma-separated phrases that would appear in an eBay title for it.\n" .
+            "- confidence: 0-100, honestly reported.\n" .
+            "Echo back the 'ref' you were given for each card, unchanged.";
+
+        $entry = [
+            'type' => 'object',
+            'additionalProperties' => false,
+            'required' => [
+                'ref', 'error_name', 'sport', 'year', 'set_name', 'card_number', 'player', 'error_type',
+                'description', 'what_to_look_for', 'corrected_exists', 'scarcer', 'slab_label',
+                'premium_note', 'rarity_note', 'search_terms', 'confidence',
+            ],
+            'properties' => [
+                'ref'              => ['type' => 'string'],
+                'error_name'       => ['type' => 'string'],
+                'sport'            => ['type' => 'string', 'enum' => ['baseball', 'basketball', 'football', 'hockey', 'golf']],
+                'year'             => ['type' => 'string'],
+                'set_name'         => ['type' => 'string'],
+                'card_number'      => ['type' => 'string'],
+                'player'           => ['type' => 'string'],
+                'error_type'       => ['type' => 'string', 'enum' => array_keys(ErrorCards::TYPES)],
+                'description'      => ['type' => 'string'],
+                'what_to_look_for' => ['type' => 'string'],
+                'corrected_exists' => ['type' => 'boolean'],
+                'scarcer'          => ['type' => 'string', 'enum' => ['ERROR', 'CORRECTED', 'UNKNOWN']],
+                'slab_label'       => ['type' => 'string'],
+                'premium_note'     => ['type' => 'string'],
+                'rarity_note'      => ['type' => 'string'],
+                'search_terms'     => ['type' => 'string'],
+                'confidence'       => ['type' => 'integer'],
+            ],
+        ];
+
+        $body = [
+            'model'      => $this->cfg['model'] ?? 'claude-opus-4-8',
+            'max_tokens' => 8000,
+            'system'     => $system,
+            'output_config' => [
+                'format' => ['type' => 'json_schema', 'schema' => [
+                    'type' => 'object',
+                    'additionalProperties' => false,
+                    'required' => ['cards'],
+                    'properties' => ['cards' => ['type' => 'array', 'items' => $entry]],
+                ]],
+            ],
+            'messages' => [[
+                'role'    => 'user',
+                'content' => "Explain each of these error cards:\n" . json_encode($cards, JSON_UNESCAPED_SLASHES),
+            ]],
+        ];
+
+        try {
+            $resp = $this->httpPost('https://api.anthropic.com/v1/messages', $body);
+        } catch (\Throwable $e) {
+            return [];
+        }
+        $data = json_decode($resp, true);
+        $text = null;
+        foreach ($data['content'] ?? [] as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $text = $block['text'];
+                break;
+            }
+        }
+        $parsed = $text !== null ? json_decode($text, true) : null;
+        if (!is_array($parsed) || !isset($parsed['cards'])) {
+            return [];
+        }
+        $out = [];
+        foreach ($parsed['cards'] as $c) {
+            if (!empty($c['ref'])) {
+                $out[(string)$c['ref']] = $c;
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Write the Morning Playbook narrative: a short market summary and an
      * optional coaching note per buy target. The plan's numbers (max bids,
      * margins) are computed deterministically by Playbook — the AI only adds
