@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $s      = fn (string $k) => trim((string)($_POST[$k] ?? '')) ?: null;
 
     if ($action === 'draft') {
-        $ai = new AiAnalyst($config['ai']);
+        $ai = new AiAnalyst(ai_config($config['ai']));
         if ($ai->isMock()) {
             flash('error', 'No Anthropic API key configured — add one in config.php to draft entries.');
         } else {
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // "Learn more" on a scan-history candidate: Claude explains the error
         // behind the listing title and it lands as a draft for review.
         $title = trim((string)($_POST['title'] ?? ''));
-        $ai = new AiAnalyst($config['ai']);
+        $ai = new AiAnalyst(ai_config($config['ai']));
         if ($ai->isMock()) {
             flash('error', 'No Anthropic API key configured — add one in config.php to explain errors.');
         } elseif ($title === '') {
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'explain_missing') {
         // Backfill: explain catalog entries that have no write-up yet.
-        $ai = new AiAnalyst($config['ai']);
+        $ai = new AiAnalyst(ai_config($config['ai']));
         if ($ai->isMock()) {
             flash('error', 'No Anthropic API key configured — add one in config.php to explain errors.');
         } else {
@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $explained = false;
         if (!empty($_POST['ai_explain'])
             && ($fields['description'] === null || $fields['what_to_look_for'] === null)) {
-            $ai = new AiAnalyst($config['ai']);
+            $ai = new AiAnalyst(ai_config($config['ai']));
             if (!$ai->isMock()) {
                 $ref = trim(($fields['year'] ?? '') . ' ' . ($fields['set_name'] ?? '') . ' ' . ($fields['player'] ?? '')
                      . ' ' . ($fields['card_number'] ? '#' . $fields['card_number'] : '') . ' — ' . $fields['error_name']);

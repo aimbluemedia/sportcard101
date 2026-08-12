@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $started = microtime(true);
     try {
         $ebay = new EbayClient(ebay_config($config['ebay']));
-        $ai   = new AiAnalyst($config['ai']);
+        $ai   = new AiAnalyst(ai_config($config['ai']));
         $res  = LotFinder::scan($pdo, $ebay, $ai);
         $secs = round(microtime(true) - $started, 1);
         flash('success', sprintf('Lot sweep done in %ss — %d live lots found (%d new), %d AI-analyzed this pass%s.',

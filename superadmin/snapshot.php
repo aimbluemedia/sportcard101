@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $started = microtime(true);
     try {
         $ebay   = new EbayClient(ebay_config($config['ebay']));
-        $ai     = new AiAnalyst($config['ai']);
+        $ai     = new AiAnalyst(ai_config($config['ai']));
         $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
         $new      = $finder->scanSelected(Auth::userId(), null, null);
         $recorded = Comps::recordClosed($pdo);

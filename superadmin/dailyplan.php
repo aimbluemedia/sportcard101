@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $ready) {
     $action = (string)($_POST['action'] ?? '');
 
     if ($action === 'generate') {
-        $res = Playbook::build($pdo, new AiAnalyst($config['ai']));
+        $res = Playbook::build($pdo, new AiAnalyst(ai_config($config['ai'])));
         flash('success', "Plan generated: {$res['buys']} buy target(s), {$res['watch']} on the watchlist, \${$res['exposure']} exposure (AI: {$res['ai']}).");
     } elseif ($action === 'settings') {
         set_setting('plan_daily_budget', (string) max(0, (float)($_POST['plan_daily_budget'] ?? 150)));

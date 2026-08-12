@@ -71,7 +71,7 @@ if ($uid === 0) {
 
 // ---- Daily task: build + email the Morning Playbook -----------------------
 if ($task === 'daily') {
-    $ai = new AiAnalyst($config['ai']);
+    $ai = new AiAnalyst(ai_config($config['ai']));
     try {
         // Record freshly closed auctions and grade yesterday's predictions
         // first, so this morning's comps and scorecard are current.
@@ -118,7 +118,7 @@ if ($task === 'daily') {
 
 // ---- Run the scan + closing tracker --------------------------------------
 $ebay   = new EbayClient(ebay_config($config['ebay']));
-$ai     = new AiAnalyst($config['ai']);
+$ai     = new AiAnalyst(ai_config($config['ai']));
 $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 
 $started = microtime(true);

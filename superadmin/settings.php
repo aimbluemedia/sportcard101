@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/../src/bootstrap.php';
 require __DIR__ . '/../src/layout.php';
 
+use SportCard101\AiAnalyst;
 use SportCard101\Auth;
 use SportCard101\EbayClient;
 
@@ -41,19 +42,33 @@ $devFields = [
     'ebay_cache_hours' => ['Cache Hours', 'How long to cache eBay results.'],
 ];
 
-$allFields = $siteFields + $epnFields + $devFields;
-$secretKeys = ['ebay_auth_token', 'ebay_cert_id'];
+// Anthropic (Claude) — powers every AI feature in the app.
+$aiFields = [
+    'ai_api_key'      => ['Anthropic API Key', 'From console.anthropic.com → API Keys (starts with sk-ant-). Secret — leave blank to keep the saved value.', 'secret'],
+    'ai_model'        => ['Model', 'e.g. claude-opus-4-8. Larger models reason better on card identity; smaller ones cost less.'],
+    'ai_max_per_scan' => ['Max listings per scan', 'Cost control: how many deal candidates get sent to Claude on each 30-minute scan.'],
+];
+
+$allFields = $siteFields + $epnFields + $devFields + $aiFields;
+$secretKeys = ['ebay_auth_token', 'ebay_cert_id', 'ai_api_key'];
 
 $defaults = [
     'ebay_marketplace' => 'EBAY_US',
     'ebay_endpoint'    => 'https://api.ebay.com',
     'ebay_cache_hours' => '12',
+    'ai_model'         => 'claude-opus-4-8',
+    'ai_max_per_scan'  => '15',
 ];
 
 // Test the Browse keyset (powers the scanner) using the currently SAVED values.
 if (isset($_GET['test']) && $_GET['test'] === 'ebay') {
     [$ok, $msg] = (new EbayClient(ebay_config($config['ebay'])))->testConnection();
     flash($ok ? 'success' : 'error', 'eBay: ' . $msg);
+    redirect('/superadmin/settings.php');
+}
+if (isset($_GET['test']) && $_GET['test'] === 'ai') {
+    [$ok, $msg] = (new AiAnalyst(ai_config($config['ai'])))->testConnection();
+    flash($ok ? 'success' : 'error', 'Claude: ' . $msg);
     redirect('/superadmin/settings.php');
 }
 
@@ -159,9 +174,35 @@ if ($cronLastRun) {
         <p class="field-help"><?= e($help) ?></p>
     <?php endforeach; ?>
 
+    <hr style="margin:26px 0 8px">
+    <?php $aiLive = (string) setting('ai_api_key', (string)($config['ai']['api_key'] ?? '')) !== ''; ?>
+    <h2>🤖 Claude API <small style="color:var(--muted);font-weight:400">— powers every AI feature</small></h2>
+    <p class="sub">
+        API key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.
+        Drives deal verdicts and hidden gems, card-name normalisation, the Morning Playbook narrative,
+        bulk-lot valuation, and error-card explanations.
+        Status: <strong style="color:<?= $aiLive ? '#3aa66a' : '#e0a935' ?>"><?= $aiLive ? 'live' : 'mock mode — heuristics only' ?></strong>.
+    </p>
+    <?php foreach ($aiFields as $key => $def):
+        [$label, $help] = [$def[0], $def[1] ?? ''];
+        $isSecret = in_array($key, $secretKeys, true);
+        $set = (string) setting($key, '') !== '';
+        $val = setting($key, $defaults[$key] ?? '');
+    ?>
+        <label><?= e($label) ?></label>
+        <?php if ($isSecret): ?>
+            <input name="<?= e($key) ?>" type="password" autocomplete="off" value="" placeholder="<?= $set ? '•••••••• (saved — leave blank to keep)' : 'paste value' ?>">
+        <?php else: ?>
+            <input name="<?= e($key) ?>" value="<?= e((string)$val) ?>">
+        <?php endif; ?>
+        <p class="field-help"><?= e($help) ?></p>
+    <?php endforeach; ?>
+    <p class="field-help">Without a key the app still runs — it falls back to deterministic heuristics, and AI-only features (error explanations, playbook narrative, lot valuation) stay quiet rather than guessing.</p>
+
     <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-primary" type="submit">Save settings</button>
         <a class="btn" href="/superadmin/settings.php?test=ebay">⚡ Test eBay connection</a>
+        <a class="btn" href="/superadmin/settings.php?test=ai">🤖 Test Claude connection</a>
     </div>
 </form>
 <?php

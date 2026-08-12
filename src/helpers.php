@@ -123,6 +123,20 @@ function ebay_config(array $fileCfg): array
 }
 
 /**
+ * Build the Claude (Anthropic) config, preferring values saved in the admin
+ * Settings page and falling back to config.php / environment variables.
+ * With no API key anywhere, AiAnalyst runs in deterministic MOCK mode.
+ */
+function ai_config(array $fileCfg): array
+{
+    return [
+        'api_key'      => setting('ai_api_key', (string)($fileCfg['api_key'] ?? '')),
+        'model'        => setting('ai_model', (string)($fileCfg['model'] ?? 'claude-opus-4-8')) ?: 'claude-opus-4-8',
+        'max_per_scan' => (int) (setting('ai_max_per_scan', (string)($fileCfg['max_per_scan'] ?? 15)) ?: 15),
+    ];
+}
+
+/**
  * Wrap an eBay URL with eBay Partner Network affiliate tracking, using the
  * Campaign ID / Custom ID saved in admin Settings. Works for any eBay item or
  * search URL — no API call required (this is EPN's standard link format).
