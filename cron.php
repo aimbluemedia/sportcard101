@@ -35,6 +35,7 @@ use SportCard101\AiAnalyst;
 use SportCard101\DealFinder;
 use SportCard101\Comps;
 use SportCard101\DealAlerts;
+use SportCard101\ErrorCards;
 use SportCard101\LotFinder;
 use SportCard101\Mailer;
 use SportCard101\Playbook;
@@ -137,6 +138,15 @@ try {
         // lots are a bonus; ignore failures here
     }
 
+    // Possible error cards in live auctions — also best-effort. No eBay calls:
+    // this matches the published catalog against listings already captured.
+    $errorAlerts = 0;
+    try {
+        $errorAlerts = ErrorCards::alert($pdo);
+    } catch (\Throwable $e) {
+        // catalog may be empty or not yet created
+    }
+
     $secs = round(microtime(true) - $started, 1);
 
     // Heartbeat — lets the superadmin Settings page confirm cron is firing.
@@ -151,6 +161,7 @@ try {
     echo "picks graded:      {$graded}\n";
     echo "deal alerts sent:  " . count($alerts) . "\n";
     echo "lots:              {$lots['found']} live ({$lots['new']} new, {$lots['analyzed']} valued, {$lotAlerts} alerted)\n";
+    echo "error cards:       {$errorAlerts} alerted\n";
     echo "ebay mode:         " . ($ebay->isMock() ? 'mock (no keyset)' : 'live') . "\n";
     echo "took:              {$secs}s\n";
 } catch (\Throwable $e) {

@@ -9,6 +9,7 @@ use SportCard101\AiAnalyst;
 use SportCard101\Comps;
 use SportCard101\DealFinder;
 use SportCard101\EbayClient;
+use SportCard101\ErrorCards;
 use SportCard101\Playbook;
 
 Auth::requireAdmin();
@@ -106,6 +107,13 @@ $hot = $pdo->query(
      HAVING gained >= 3
      ORDER BY gained DESC LIMIT 12"
 )->fetchAll();
+
+// ---- Possible error cards: live listings matching the published catalog ------
+$errorHits = [];
+try {
+    $errorHits = array_slice(ErrorCards::liveMatches($pdo, 600), 0, 12);
+} catch (\Throwable $e) {
+}
 
 // ---- Hidden gems: AI-flagged weak listings still live ------------------------
 $gems = $pdo->query(
@@ -263,6 +271,30 @@ Data as of last scan: <strong><?= $lastScan ? e(date('M j, g:ia', strtotime((str
         <?php endforeach; ?>
     </table></div>
     <p style="margin:10px 0 0;color:var(--muted)"><small>No auction to wait for — if the comp holds up on inspection, these are buyable right now. Fastest-moving section; verify before it's gone.</small></p>
+</div>
+<?php endif; ?>
+
+<?php if ($errorHits): ?>
+<div class="card" style="margin-bottom:16px;border-left:4px solid #b8860b">
+    <h2 style="margin-top:0">🔍 Possible error cards (<?= count($errorHits) ?>)</h2>
+    <p class="sub" style="margin-bottom:12px">Live auctions matching your published <a href="/superadmin/errorcards.php">error catalog</a>. A title match is a lead — run the check against the photos before bidding.</p>
+    <div style="overflow-x:auto"><table>
+        <tr><th>Possible error</th><th>Listing</th><th>Now</th><th>Bids</th><th>Ends</th><th>Check</th><th></th></tr>
+        <?php foreach ($errorHits as $h): $l = $h['listing']; $er = $h['error']; ?>
+        <tr>
+            <td style="white-space:nowrap"><strong style="color:#b8860b"><?= e((string)$er['error_name']) ?></strong></td>
+            <td style="max-width:260px"><?= e((string)$l['title']) ?></td>
+            <td style="white-space:nowrap">$<?= number_format((float)$l['price'], 2) ?></td>
+            <td><?= (int)($l['bid_count'] ?? 0) ?></td>
+            <td><?= snap_ends((string)$l['end_time']) ?></td>
+            <td style="max-width:260px"><small><?= e(mb_strimwidth((string)($er['what_to_look_for'] ?? ''), 0, 130, '…')) ?></small></td>
+            <td><div style="display:flex;gap:6px">
+                <a class="btn" href="<?= e(epn_link((string)$l['item_url'])) ?>" target="_blank" rel="noopener">View on eBay</a>
+                <a class="btn btn-sm" href="/errors.php?card=<?= e((string)$er['slug']) ?>" target="_blank">Guide</a>
+            </div></td>
+        </tr>
+        <?php endforeach; ?>
+    </table></div>
 </div>
 <?php endif; ?>
 
