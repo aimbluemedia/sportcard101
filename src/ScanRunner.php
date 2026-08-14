@@ -58,8 +58,18 @@ final class ScanRunner
 
         $started = microtime(true);
         $t = fn () => round(microtime(true) - $started, 1) . 's';
+        // Report the idle timeout MySQL is actually enforcing. If this shows the
+        // 900s we request, connections dropping sooner means something other
+        // than wait_timeout is closing them (a proxy or connection limiter).
+        $waitTimeout = '?';
+        try {
+            $row = $pdo->query("SHOW SESSION VARIABLES LIKE 'wait_timeout'")->fetch();
+            $waitTimeout = $row['Value'] ?? '?';
+        } catch (\Throwable $e) {
+        }
         Diag::log('SCAN START (uid ' . $uid . ', ebay ' . ($ebay->isMock() ? 'mock' : 'live')
-            . ', ai ' . ($ai->isMock() ? 'mock' : 'live') . ', limit ' . (string)@ini_get('max_execution_time') . 's)');
+            . ', ai ' . ($ai->isMock() ? 'mock' : 'live') . ', php limit ' . (string)@ini_get('max_execution_time')
+            . 's, mysql wait_timeout ' . $waitTimeout . 's)');
 
         // Channels are scanned in slices, resuming where the last run stopped.
         // Scanning every channel in one request grew past 60s, which trips
