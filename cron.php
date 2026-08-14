@@ -53,10 +53,16 @@ register_shutdown_function(function (): void {
     if (str_contains($e['message'], 'Maximum execution time')) {
         $msg .= ' — the scan exceeded this host\'s time limit. Reduce active channels, or run cron from the command line where no limit applies.';
     }
-    // Three places, because the web server may discard whatever we print.
+    // File first — the DB may be exactly what died. @ suppresses warnings but
+    // NOT exceptions, so the DB writes must be guarded explicitly or this
+    // handler throws and buries the error it exists to report.
     \SportCard101\Diag::log('FATAL: ' . $msg);
-    @set_setting('cron_last_run', date('Y-m-d H:i:s'));
-    @set_setting('cron_last_status', 'FATAL — ' . mb_substr($msg, 0, 400));
+    try {
+        set_setting('cron_last_run', date('Y-m-d H:i:s'));
+        set_setting('cron_last_status', 'FATAL — ' . mb_substr($msg, 0, 400));
+    } catch (\Throwable $e2) {
+        \SportCard101\Diag::log('  (status not recorded: ' . $e2->getMessage() . ')');
+    }
     echo "\nFATAL: {$msg}\n";
 });
 
@@ -128,8 +134,17 @@ try {
     echo 'ebay mode:         ' . ($r['mock'] ? 'mock (no keyset)' : 'live') . "\n";
     echo "took:              {$r['secs']}s\n";
 } catch (\Throwable $e) {
-    set_setting('cron_last_run', date('Y-m-d H:i:s'));
-    set_setting('cron_last_status', 'ERROR — ' . $e->getMessage());
+    // Log to FILE first — no database involved, so the real error survives even
+    // when the connection is what died. Recording it in the DB is best-effort.
+    \SportCard101\Diag::log('SCAN ERROR: ' . get_class($e) . ': ' . $e->getMessage()
+        . ' in ' . basename($e->getFile()) . ':' . $e->getLine());
+    \SportCard101\Diag::log('  trace: ' . mb_substr($e->getTraceAsString(), 0, 600));
+    try {
+        set_setting('cron_last_run', date('Y-m-d H:i:s'));
+        set_setting('cron_last_status', 'ERROR — ' . mb_substr($e->getMessage(), 0, 400));
+    } catch (\Throwable $e2) {
+        \SportCard101\Diag::log('  (status not recorded: ' . $e2->getMessage() . ')');
+    }
     http_response_code(500);
     echo 'ERROR: ' . $e->getMessage() . "\n";
 }

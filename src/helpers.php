@@ -83,12 +83,27 @@ function setting(string $key, ?string $default = null): ?string
     return $cache[$key] ?? $default;
 }
 
-/** Write a site setting (upsert into the key/value table). */
+/**
+ * Write a site setting (upsert into the key/value table).
+ *
+ * Reconnects once if the server has dropped the link. This matters most in
+ * error handlers: they run precisely when a long API call has just killed the
+ * connection, and a throw here would replace the real error with a useless
+ * one. Reassigning the global hands the fresh connection to later callers.
+ */
 function set_setting(string $key, string $val): void
 {
     global $pdo;
-    $pdo->prepare('INSERT INTO settings (skey, sval) VALUES (?, ?) ON DUPLICATE KEY UPDATE sval = VALUES(sval)')
-        ->execute([$key, $val]);
+    $sql = 'INSERT INTO settings (skey, sval) VALUES (?, ?) ON DUPLICATE KEY UPDATE sval = VALUES(sval)';
+    try {
+        $pdo->prepare($sql)->execute([$key, $val]);
+    } catch (\Throwable $e) {
+        if (!\SportCard101\Database::isGoneAway($e)) {
+            throw $e;
+        }
+        $pdo = \SportCard101\Database::reconnect();
+        $pdo->prepare($sql)->execute([$key, $val]);
+    }
 }
 
 /**
