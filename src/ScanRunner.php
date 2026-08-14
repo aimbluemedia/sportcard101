@@ -60,6 +60,8 @@ final class ScanRunner
         // looking like the scan never happened.
         $newDeals = $finder->scanSelected($uid, null, null);
         Diag::log('  channels scanned — ' . count($newDeals) . ' deals @ ' . $t());
+        // Long eBay/AI calls above can outlive MySQL's idle timeout.
+        $pdo = Database::alive($pdo);
         $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
         Diag::log('  comps recorded: ' . $recorded . ' @ ' . $t());
         $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions FIRST
@@ -85,6 +87,7 @@ final class ScanRunner
                 \set_setting('lots_last_sweep', (string) time());
                 Diag::log('  lot sweep starting… @ ' . $t());
                 $lots = LotFinder::scan($pdo, $ebay, $ai);
+                $pdo  = Database::alive($pdo); // sweep makes eBay + AI calls
                 Diag::log('  lot sweep done: ' . $lots['found'] . ' found @ ' . $t());
             } else {
                 Diag::log('  lot sweep skipped (2h cadence) @ ' . $t());
@@ -129,7 +132,8 @@ final class ScanRunner
         // morning's comps and scorecard are current.
         $recorded = Comps::recordClosed($pdo);
         $graded   = Playbook::gradeClosed($pdo);
-        $res      = Playbook::build($pdo, $ai);
+        $res      = Playbook::build($pdo, $ai);   // includes an AI narrative call
+        $pdo      = Database::alive($pdo);
         $plan     = Playbook::load($pdo, date('Y-m-d'));
         $score    = Playbook::scorecard($pdo);
 

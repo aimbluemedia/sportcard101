@@ -32,6 +32,9 @@ final class DealFinder
             $search['buying_option'],
             $this->scanLimit
         );
+        // The eBay round-trip (and the previous channel's AI call) can outlast
+        // MySQL's idle timeout — make sure the link is live before writing.
+        $this->pdo = Database::alive($this->pdo);
 
         $listings = array_values(array_filter(
             $listings,
@@ -92,6 +95,9 @@ final class DealFinder
                 'keywords' => $search['keywords'],
                 'grade'    => $search['grade'],
             ]);
+            // That call can take a minute; MySQL may have dropped the idle
+            // connection while we waited. Re-establish before writing back.
+            $this->pdo = Database::alive($this->pdo);
             foreach ($analyses as $itemId => $a) {
                 $this->saveAi((int)$search['id'], (string)$itemId, $a);
             }
