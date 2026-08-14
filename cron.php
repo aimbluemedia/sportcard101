@@ -30,15 +30,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/src/bootstrap.php';
 
-use SportCard101\EbayClient;
-use SportCard101\AiAnalyst;
-use SportCard101\DealFinder;
-use SportCard101\Comps;
-use SportCard101\DealAlerts;
-use SportCard101\ErrorCards;
-use SportCard101\LotFinder;
-use SportCard101\Mailer;
-use SportCard101\Playbook;
+use SportCard101\ScanRunner;
 
 header('Content-Type: text/plain; charset=utf-8');
 
@@ -71,44 +63,17 @@ if ($uid === 0) {
 
 // ---- Daily task: build + email the Morning Playbook -----------------------
 if ($task === 'daily') {
-    $ai = new AiAnalyst(ai_config($config['ai']));
     try {
-        // Record freshly closed auctions and grade yesterday's predictions
-        // first, so this morning's comps and scorecard are current.
-        $recorded = Comps::recordClosed($pdo);
-        $graded   = Playbook::gradeClosed($pdo);
-        $res  = Playbook::build($pdo, $ai);
-        $plan = Playbook::load($pdo, date('Y-m-d'));
-        $score = Playbook::scorecard($pdo);
-
-        $sent = false;
-        $to   = trim((string) setting('notify_email', ''));
-        if ($to !== '' && $plan) {
-            $sells   = Playbook::sellActions($pdo);
-            $subject = 'Morning Playbook — ' . date('D, M j') . ': '
-                     . ($res['buys'] > 0 ? $res['buys'] . ' buy target' . ($res['buys'] === 1 ? '' : 's') : 'no qualified buys');
-            $sent = Mailer::send($to, $subject,
-                Playbook::emailText($plan, $sells, $score),
-                Playbook::emailHtml($plan, $sells, $score));
-        }
-
-        // Bulk Auctions digest — its own email, so lots never crowd the playbook.
-        $lotDigest = 0;
-        try {
-            $lotDigest = LotFinder::dailyDigest($pdo);
-        } catch (\Throwable $e) {
-            // digest is a bonus; never break the daily task
-        }
-
+        $r = ScanRunner::daily($pdo, $config);
         echo "OK (daily playbook)\n";
-        echo "buy targets:  {$res['buys']}\n";
-        echo "watchlist:    {$res['watch']}\n";
-        echo "exposure:     \${$res['exposure']}\n";
-        echo "new comps:    {$recorded}\n";
-        echo "picks graded: {$graded}\n";
-        echo "ai narrative: {$res['ai']}\n";
-        echo 'email:        ' . ($sent ? "sent to {$to}" : 'not sent') . "\n";
-        echo 'lot digest:   ' . ($lotDigest > 0 ? "{$lotDigest} lots emailed" : 'nothing worth a look') . "\n";
+        echo "buy targets:  {$r['buys']}\n";
+        echo "watchlist:    {$r['watch']}\n";
+        echo "exposure:     \${$r['exposure']}\n";
+        echo "new comps:    {$r['comps']}\n";
+        echo "picks graded: {$r['graded']}\n";
+        echo "ai narrative: {$r['ai']}\n";
+        echo 'email:        ' . ($r['sent'] ? "sent to {$r['to']}" : 'not sent') . "\n";
+        echo 'lot digest:   ' . ($r['lot_digest'] > 0 ? "{$r['lot_digest']} lots emailed" : 'nothing worth a look') . "\n";
     } catch (\Throwable $e) {
         http_response_code(500);
         echo 'ERROR: ' . $e->getMessage() . "\n";
@@ -117,56 +82,20 @@ if ($task === 'daily') {
 }
 
 // ---- Run the scan + closing tracker --------------------------------------
-$ebay   = new EbayClient(ebay_config($config['ebay']));
-$ai     = new AiAnalyst(ai_config($config['ai']));
-$finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
-
-$started = microtime(true);
 try {
-    $newDeals = $finder->scanSelected($uid, null, null);
-    $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
-    $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions FIRST
-    $graded   = Playbook::gradeClosed($pdo);   // then grade playbook picks (never blocks alerts)
-
-    // Bulk-lot sweep + BUY-lot alert email — best-effort, never breaks the scan.
-    $lots = ['found' => 0, 'new' => 0, 'analyzed' => 0];
-    $lotAlerts = 0;
-    try {
-        $lots = LotFinder::scan($pdo, $ebay, $ai);
-        $lotAlerts = LotFinder::alert($pdo);
-    } catch (\Throwable $e) {
-        // lots are a bonus; ignore failures here
-    }
-
-    // Possible error cards in live auctions — also best-effort. No eBay calls:
-    // this matches the published catalog against listings already captured.
-    $errorAlerts = 0;
-    try {
-        $errorAlerts = ErrorCards::alert($pdo);
-    } catch (\Throwable $e) {
-        // catalog may be empty or not yet created
-    }
-
-    $secs = round(microtime(true) - $started, 1);
-
-    // Heartbeat — lets the superadmin Settings page confirm cron is firing.
-    $summary = sprintf('OK — %d deals flagged, %d sold comps, %d alerts sent, %ss (%s)',
-        count($newDeals), $recorded, count($alerts), $secs, $ebay->isMock() ? 'mock' : 'live');
-    set_setting('cron_last_run', date('Y-m-d H:i:s'));
-    set_setting('cron_last_status', $summary);
-
+    $r = ScanRunner::run($pdo, $config, $uid);
     echo "OK\n";
-    echo "new deals flagged: " . count($newDeals) . "\n";
-    echo "new sold comps:    {$recorded}\n";
-    echo "picks graded:      {$graded}\n";
-    echo "deal alerts sent:  " . count($alerts) . "\n";
-    echo "lots:              {$lots['found']} live ({$lots['new']} new, {$lots['analyzed']} valued, {$lotAlerts} alerted)\n";
-    echo "error cards:       {$errorAlerts} alerted\n";
-    echo "ebay mode:         " . ($ebay->isMock() ? 'mock (no keyset)' : 'live') . "\n";
-    echo "took:              {$secs}s\n";
+    echo "new deals flagged: {$r['deals']}\n";
+    echo "new sold comps:    {$r['comps']}\n";
+    echo "picks graded:      {$r['graded']}\n";
+    echo "deal alerts sent:  {$r['alerts']}\n";
+    echo "lots:              {$r['lots']['found']} live ({$r['lots']['new']} new, {$r['lots']['analyzed']} valued, {$r['lot_alerts']} alerted)\n";
+    echo "error cards:       {$r['error_alerts']} alerted\n";
+    echo 'ebay mode:         ' . ($r['mock'] ? 'mock (no keyset)' : 'live') . "\n";
+    echo "took:              {$r['secs']}s\n";
 } catch (\Throwable $e) {
     set_setting('cron_last_run', date('Y-m-d H:i:s'));
     set_setting('cron_last_status', 'ERROR — ' . $e->getMessage());
     http_response_code(500);
-    echo "ERROR: " . $e->getMessage() . "\n";
+    echo 'ERROR: ' . $e->getMessage() . "\n";
 }
