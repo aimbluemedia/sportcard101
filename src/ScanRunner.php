@@ -14,6 +14,9 @@ use PDO;
  */
 final class ScanRunner
 {
+    /** How often the (expensive) bulk-lot eBay sweep runs, in seconds. */
+    public const LOT_SWEEP_INTERVAL = 7200; // 2 hours
+
     /** The superadmin whose channels the scanner runs. 0 when none exists. */
     public static function ownerId(PDO $pdo): int
     {
@@ -33,6 +36,10 @@ final class ScanRunner
      */
     public static function run(PDO $pdo, array $config, ?int $uid = null): array
     {
+        // Scans outgrow the default 30s web limit as channels are added, and a
+        // timeout kill is an uncatchable fatal. Raise it for every caller.
+        @set_time_limit(600);
+
         $uid = $uid ?? self::ownerId($pdo);
         if ($uid === 0) {
             throw new \RuntimeException('No superadmin user found.');
@@ -42,17 +49,35 @@ final class ScanRunner
         $ai     = new AiAnalyst(\ai_config($config['ai']));
         $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 
-        $started  = microtime(true);
+        $started = microtime(true);
+
+        // The core work, in priority order. The heartbeat is stamped as soon as
+        // this completes — everything after it is a bonus, so a host time-limit
+        // kill during the extras still leaves an accurate "last run" instead of
+        // looking like the scan never happened.
         $newDeals = $finder->scanSelected($uid, null, null);
         $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
         $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions FIRST
         $graded   = Playbook::gradeClosed($pdo);   // then grade picks (never blocks alerts)
 
-        // Bulk-lot sweep + BUY-lot alerts — best-effort, never breaks the scan.
+        $coreSecs = round(microtime(true) - $started, 1);
+        \set_setting('cron_last_run', date('Y-m-d H:i:s'));
+        \set_setting('cron_last_status', sprintf(
+            'OK — %d deals flagged, %d sold comps, %d alerts sent, %ss (%s)',
+            count($newDeals), $recorded, count($alerts), $coreSecs, $ebay->isMock() ? 'mock' : 'live'
+        ));
+
+        // Bulk-lot sweep — the most expensive extra (4 eBay searches + an AI
+        // pass), so it runs on its own slower cadence rather than every scan.
+        // The alert step is DB-only and stays on every pass.
         $lots = ['found' => 0, 'new' => 0, 'analyzed' => 0];
         $lotAlerts = 0;
         try {
-            $lots = LotFinder::scan($pdo, $ebay, $ai);
+            $lastSweep = (int) (\setting('lots_last_sweep', '0') ?: 0);
+            if (time() - $lastSweep >= self::LOT_SWEEP_INTERVAL) {
+                \set_setting('lots_last_sweep', (string) time());
+                $lots = LotFinder::scan($pdo, $ebay, $ai);
+            }
             $lotAlerts = LotFinder::alert($pdo);
         } catch (\Throwable $e) {
         }
@@ -66,13 +91,6 @@ final class ScanRunner
         }
 
         $secs = round(microtime(true) - $started, 1);
-
-        // Heartbeat — the Settings panel reads these.
-        \set_setting('cron_last_run', date('Y-m-d H:i:s'));
-        \set_setting('cron_last_status', sprintf(
-            'OK — %d deals flagged, %d sold comps, %d alerts sent, %ss (%s)',
-            count($newDeals), $recorded, count($alerts), $secs, $ebay->isMock() ? 'mock' : 'live'
-        ));
 
         return [
             'deals' => count($newDeals), 'comps' => $recorded, 'alerts' => count($alerts),
@@ -89,6 +107,7 @@ final class ScanRunner
      */
     public static function daily(PDO $pdo, array $config): array
     {
+        @set_time_limit(600);
         $ai = new AiAnalyst(\ai_config($config['ai']));
 
         // Freshly closed auctions and yesterday's grades first, so this
