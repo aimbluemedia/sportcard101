@@ -17,6 +17,13 @@ final class ScanRunner
     /** How often the (expensive) bulk-lot eBay sweep runs, in seconds. */
     public const LOT_SWEEP_INTERVAL = 7200; // 2 hours
 
+    /**
+     * Seconds of channel scanning per run before the rest is deferred to the
+     * next one. Kept well under the ~60s gateway timeout typical of shared
+     * hosts, so a run always finishes before anything gives up on it.
+     */
+    public const CHANNEL_TIME_BUDGET = 25;
+
     /** The superadmin whose channels the scanner runs. 0 when none exists. */
     public static function ownerId(PDO $pdo): int
     {
@@ -54,12 +61,43 @@ final class ScanRunner
         Diag::log('SCAN START (uid ' . $uid . ', ebay ' . ($ebay->isMock() ? 'mock' : 'live')
             . ', ai ' . ($ai->isMock() ? 'mock' : 'live') . ', limit ' . (string)@ini_get('max_execution_time') . 's)');
 
-        // The core work, in priority order. The heartbeat is stamped as soon as
-        // this completes — everything after it is a bonus, so a host time-limit
-        // kill during the extras still leaves an accurate "last run" instead of
-        // looking like the scan never happened.
-        $newDeals = $finder->scanSelected($uid, null, null);
-        Diag::log('  channels scanned — ' . count($newDeals) . ' deals @ ' . $t());
+        // Channels are scanned in slices, resuming where the last run stopped.
+        // Scanning every channel in one request grew past 60s, which trips
+        // gateway timeouts (504) regardless of PHP's own limit. Each run now
+        // works to a time budget and hands the rest to the next run — with a
+        // scan every 30 minutes, every channel still gets covered many times
+        // a day.
+        $newDeals  = [];
+        $scanned   = 0;
+        $totalChan = 0;
+        try {
+            $stmt = $pdo->prepare('SELECT * FROM searches WHERE user_id = ? AND active = 1 ORDER BY id ASC');
+            $stmt->execute([$uid]);
+            $channels  = $stmt->fetchAll();
+            $totalChan = count($channels);
+
+            if ($totalChan > 0) {
+                $cursor = ((int) (\setting('scan_cursor', '0') ?: 0)) % $totalChan;
+                for ($i = 0; $i < $totalChan; $i++) {
+                    // Always do at least one channel, then respect the budget.
+                    if ($i > 0 && (microtime(true) - $started) > self::CHANNEL_TIME_BUDGET) {
+                        break;
+                    }
+                    $search = $channels[($cursor + $i) % $totalChan];
+                    foreach ($finder->scanSearch($search) as $deal) {
+                        $deal['search_label'] = $search['label'];
+                        $newDeals[] = $deal;
+                    }
+                    $scanned++;
+                    $pdo = Database::alive($pdo); // each channel does eBay + AI work
+                }
+                \set_setting('scan_cursor', (string) (($cursor + $scanned) % $totalChan));
+            }
+        } catch (\Throwable $e) {
+            Diag::log('  channel scan FAILED: ' . $e->getMessage());
+            throw $e;
+        }
+        Diag::log("  channels scanned {$scanned}/{$totalChan} — " . count($newDeals) . ' deals @ ' . $t());
         // Long eBay/AI calls above can outlive MySQL's idle timeout.
         $pdo = Database::alive($pdo);
         $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
@@ -83,14 +121,19 @@ final class ScanRunner
         $lotAlerts = 0;
         try {
             $lastSweep = (int) (\setting('lots_last_sweep', '0') ?: 0);
-            if (time() - $lastSweep >= self::LOT_SWEEP_INTERVAL) {
+            $elapsed   = microtime(true) - $started;
+            if (time() - $lastSweep < self::LOT_SWEEP_INTERVAL) {
+                Diag::log('  lot sweep skipped (2h cadence) @ ' . $t());
+            } elseif ($elapsed > self::CHANNEL_TIME_BUDGET) {
+                // Out of budget — leave lots_last_sweep alone so the next run
+                // picks it up rather than skipping the sweep for another 2h.
+                Diag::log('  lot sweep deferred (run already at ' . $t() . ')');
+            } else {
                 \set_setting('lots_last_sweep', (string) time());
                 Diag::log('  lot sweep starting… @ ' . $t());
                 $lots = LotFinder::scan($pdo, $ebay, $ai);
                 $pdo  = Database::alive($pdo); // sweep makes eBay + AI calls
                 Diag::log('  lot sweep done: ' . $lots['found'] . ' found @ ' . $t());
-            } else {
-                Diag::log('  lot sweep skipped (2h cadence) @ ' . $t());
             }
             $lotAlerts = LotFinder::alert($pdo);
         } catch (\Throwable $e) {
