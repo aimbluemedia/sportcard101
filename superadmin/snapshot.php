@@ -29,6 +29,7 @@ $cfg    = Playbook::config();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $sport = isset($_POST['sport']) && isset($SPORTS[$_POST['sport']]) ? (string)$_POST['sport'] : $sport;
+    @set_time_limit(600); // same eBay work as a cron scan; outgrows the 30s default
     $started = microtime(true);
     try {
         $ebay   = new EbayClient(ebay_config($config['ebay']));

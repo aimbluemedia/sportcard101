@@ -34,6 +34,30 @@ use SportCard101\ScanRunner;
 
 header('Content-Type: text/plain; charset=utf-8');
 
+// A full scan takes ~30s and grows as channels are added. Web requests are
+// capped at 30s on most shared hosts, and a timeout kill is a FATAL that
+// try/catch cannot intercept — it surfaces as a blank HTTP 500 and the
+// heartbeat never gets stamped. Raise the ceiling, and keep running even if
+// the caller (curl, a browser tab) disconnects.
+@set_time_limit(600);
+@ignore_user_abort(true);
+
+// Turn an uncatchable fatal (timeout, memory) into a readable message AND a
+// recorded status, instead of a blank 500 that tells nobody anything.
+register_shutdown_function(function (): void {
+    $e = error_get_last();
+    if ($e === null || !in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        return;
+    }
+    $msg = $e['message'] . ' in ' . basename((string)$e['file']) . ':' . $e['line'];
+    if (str_contains($e['message'], 'Maximum execution time')) {
+        $msg .= ' — the scan exceeded this host\'s time limit. Reduce active channels, or run cron from the command line where no limit applies.';
+    }
+    @set_setting('cron_last_run', date('Y-m-d H:i:s'));
+    @set_setting('cron_last_status', 'FATAL — ' . mb_substr($msg, 0, 400));
+    echo "\nFATAL: {$msg}\n";
+});
+
 // ---- Authenticate the request --------------------------------------------
 // CLI (php cron.php KEY [daily]) or HTTP (?key=KEY[&task=daily]).
 $expected = (string) (setting('cron_key', '') ?: ($config['cron']['key'] ?? ''));
