@@ -124,7 +124,28 @@ if ($cronLastRun) {
     <p style="margin:6px 0 0;color:var(--muted)">Hostinger cron (type: <strong>PHP</strong>, every 30 min — minute <code>0,30</code>):
         <code>public_html/cron.php YOUR_SECRET</code> · daily playbook (7am): <code>public_html/cron.php YOUR_SECRET daily</code>
     </p>
-    <p style="margin:6px 0 0;color:var(--muted)">Backup: if the host cron stalls, normal page visits auto-kick a scan after 35 quiet minutes (and the day's playbook after 7am), so the system heals itself whenever anyone opens the site.</p>
+    <?php
+    // Which self-heal methods this host actually supports — the fallback used
+    // to fail silently when exec() was disabled, so state it plainly.
+    $canExec   = function_exists('exec');
+    $canFinish = function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
+    $fbNote    = (string) setting('cron_fallback_note', '');
+    ?>
+    <p style="margin:10px 0 0;color:var(--muted)">
+        <strong>Backup (traffic fallback):</strong> if the host cron stalls, a page visit runs the scan itself after 35 quiet minutes.
+        This host supports:
+        <span style="color:<?= $canExec ? '#3aa66a' : 'var(--muted)' ?>"><?= $canExec ? '✓' : '✕' ?> background process (exec)</span> ·
+        <span style="color:<?= $canFinish ? '#3aa66a' : 'var(--muted)' ?>"><?= $canFinish ? '✓' : '✕' ?> inline after page delivery</span>
+        <?php if (!$canExec && !$canFinish): ?>
+            <br><strong style="color:#e05555">Neither is available — page traffic cannot heal the schedule on this host. Use an external cron service (see below).</strong>
+        <?php endif; ?>
+    </p>
+    <?php if ($fbNote !== ''): ?>
+        <p style="margin:6px 0 0;color:var(--muted)">Last fallback attempt: <?= e($fbNote) ?></p>
+    <?php endif; ?>
+    <p style="margin:10px 0 0;color:var(--muted)"><small><strong>Most reliable option:</strong> an external cron service (e.g. cron-job.org) hitting
+        <code>https://sportcard101.com/cron.php?key=YOUR_SECRET</code> every 30 minutes, and the same URL with <code>&amp;task=daily</code> once at 7am.
+        It doesn't depend on the host's scheduler at all.</small></p>
 </div>
 
 <form method="post" class="card" style="max-width:780px"><?= csrf_field() ?>

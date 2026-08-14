@@ -63,50 +63,98 @@ if (PHP_SAPI !== 'cli' && session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 // --- Self-healing scheduler (wp-cron style fallback) ---
-// If the host's cron stops firing, ordinary page traffic kicks the scan as a
-// detached background process. Throttled, silent, and skipped entirely while
-// the real cron is healthy. cron.php itself is excluded to avoid recursion.
+// If the host's cron stops firing, ordinary page traffic runs the scan itself.
+// Two delivery methods, tried in order:
+//   1. exec() — a detached background process (fastest, but shared hosts
+//      almost always disable exec; function_exists() reports false then).
+//   2. Inline after the response is flushed to the browser, via
+//      fastcgi_finish_request() (PHP-FPM) or litespeed_finish_request()
+//      (LiteSpeed, which Hostinger uses). The visitor waits for nothing.
+// If neither is available we record that, so Settings can say so plainly
+// instead of the fallback failing silently. cron.php is excluded (recursion).
 if (PHP_SAPI !== 'cli' && basename((string)($_SERVER['SCRIPT_NAME'] ?? '')) !== 'cron.php') {
     try {
         $cronKey = (string) (setting('cron_key', '') ?: ($config['cron']['key'] ?? ''));
-        if ($cronKey !== '' && function_exists('exec')) {
-            $phpBin = null;
-            foreach (['/usr/bin/php', PHP_BINDIR . '/php', PHP_BINARY] as $cand) {
-                if ($cand && @is_executable($cand)) { $phpBin = $cand; break; }
-            }
-            $kick = function (string $task) use ($cronKey, $phpBin): void {
-                if ($phpBin === null) { return; }
-                @exec(escapeshellarg($phpBin) . ' ' . escapeshellarg(APP_ROOT . '/cron.php')
-                    . ' ' . escapeshellarg($cronKey) . ($task !== '' ? ' ' . escapeshellarg($task) : '')
-                    . ' > /dev/null 2>&1 &');
-            };
 
-            // Scan: stale when no run in 35 min. Re-kick at most every 10 min.
-            $lastRun  = (string) (setting('cron_last_run', '') ?? '');
-            $lastKick = (int) (setting('cron_kick_at', '0') ?: 0);
-            if (($lastRun === '' || time() - strtotime($lastRun) > 35 * 60) && time() - $lastKick > 10 * 60) {
+        // Is a scan overdue? Stale after 35 min, re-attempted at most every 10.
+        $lastRun   = (string) (setting('cron_last_run', '') ?? '');
+        $lastKick  = (int) (setting('cron_kick_at', '0') ?: 0);
+        $needScan  = ($lastRun === '' || time() - strtotime($lastRun) > 35 * 60)
+                     && (time() - $lastKick > 10 * 60);
+
+        // Is today's playbook missing after 7am? Attempted once per day.
+        $needPlan = false;
+        if ((int) date('G') >= 7 && (string) (setting('plan_kick_day', '') ?? '') !== date('Y-m-d')) {
+            try {
+                $q = $pdo->prepare('SELECT 1 FROM daily_plans WHERE plan_date = ?');
+                $q->execute([date('Y-m-d')]);
+                $needPlan = !$q->fetchColumn();
+            } catch (\Throwable $e) {
+                $needPlan = false; // tables not migrated — nothing to build
+            }
+        }
+
+        if ($cronKey !== '' && ($needScan || $needPlan)) {
+            // Claim the work before doing it, so concurrent hits don't pile on.
+            if ($needScan) {
                 set_setting('cron_kick_at', (string) time());
-                $kick('');
+            }
+            if ($needPlan) {
+                set_setting('plan_kick_day', date('Y-m-d'));
             }
 
-            // Morning Playbook: kick once if 7am has passed with no plan today.
-            if ((int) date('G') >= 7) {
-                $planKickDay = (string) (setting('plan_kick_day', '') ?? '');
-                $today = date('Y-m-d');
-                if ($planKickDay !== $today) {
-                    $hasPlan = false;
-                    try {
-                        $q = $pdo->prepare('SELECT 1 FROM daily_plans WHERE plan_date = ?');
-                        $q->execute([$today]);
-                        $hasPlan = (bool) $q->fetchColumn();
-                    } catch (\Throwable $e) {
-                        $hasPlan = true; // tables not migrated — nothing to kick
-                    }
-                    if (!$hasPlan) {
-                        set_setting('plan_kick_day', $today);
-                        $kick('daily');
+            $phpBin = null;
+            if (function_exists('exec')) {
+                foreach (['/usr/bin/php', PHP_BINDIR . '/php', PHP_BINARY] as $cand) {
+                    if ($cand && @is_executable($cand)) {
+                        $phpBin = $cand;
+                        break;
                     }
                 }
+            }
+            $canFinish = function_exists('fastcgi_finish_request') || function_exists('litespeed_finish_request');
+
+            if ($phpBin !== null) {
+                foreach (array_filter(['' => $needScan, 'daily' => $needPlan]) as $task => $_) {
+                    @exec(escapeshellarg($phpBin) . ' ' . escapeshellarg(APP_ROOT . '/cron.php')
+                        . ' ' . escapeshellarg($cronKey) . ($task !== '' ? ' ' . escapeshellarg($task) : '')
+                        . ' > /dev/null 2>&1 &');
+                }
+                set_setting('cron_fallback_note', date('M j, g:ia') . ' — background process (exec)');
+            } elseif ($canFinish) {
+                // Deliver the page first, then scan in the leftover process.
+                register_shutdown_function(function () use ($pdo, $config, $needScan, $needPlan): void {
+                    if (function_exists('fastcgi_finish_request')) {
+                        @fastcgi_finish_request();
+                    } elseif (function_exists('litespeed_finish_request')) {
+                        @litespeed_finish_request();
+                    }
+                    // One runner at a time, no matter how many visitors land.
+                    $fh = @fopen(sys_get_temp_dir() . '/sportcard101-scan.lock', 'c');
+                    if (!$fh || !@flock($fh, LOCK_EX | LOCK_NB)) {
+                        return;
+                    }
+                    @set_time_limit(300);
+                    @ignore_user_abort(true);
+                    try {
+                        if ($needScan) {
+                            \SportCard101\ScanRunner::run($pdo, $config);
+                        }
+                        if ($needPlan) {
+                            \SportCard101\ScanRunner::daily($pdo, $config);
+                        }
+                        set_setting('cron_fallback_note', date('M j, g:ia') . ' — ran inline after a page visit');
+                    } catch (\Throwable $e) {
+                        set_setting('cron_last_run', date('Y-m-d H:i:s'));
+                        set_setting('cron_last_status', 'ERROR (traffic fallback) — ' . $e->getMessage());
+                    } finally {
+                        @flock($fh, LOCK_UN);
+                        @fclose($fh);
+                    }
+                });
+            } else {
+                set_setting('cron_fallback_note', date('M j, g:ia')
+                    . ' — UNAVAILABLE: this host blocks exec() and has no finish-request support, so page traffic cannot run the scan. Use an external cron service.');
             }
         }
     } catch (\Throwable $e) {
