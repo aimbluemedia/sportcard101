@@ -53,10 +53,20 @@ register_shutdown_function(function (): void {
     if (str_contains($e['message'], 'Maximum execution time')) {
         $msg .= ' — the scan exceeded this host\'s time limit. Reduce active channels, or run cron from the command line where no limit applies.';
     }
+    // Three places, because the web server may discard whatever we print.
+    \SportCard101\Diag::log('FATAL: ' . $msg);
     @set_setting('cron_last_run', date('Y-m-d H:i:s'));
     @set_setting('cron_last_status', 'FATAL — ' . mb_substr($msg, 0, 400));
     echo "\nFATAL: {$msg}\n";
 });
+
+// ?debug=1 surfaces errors inline instead of leaving a blank 500 behind.
+if (!empty($_GET['debug'])) {
+    @ini_set('display_errors', '1');
+    @ini_set('display_startup_errors', '1');
+    error_reporting(E_ALL);
+}
+\SportCard101\Diag::log('--- cron.php invoked (' . PHP_SAPI . ', task="' . ($_GET['task'] ?? ($argv[2] ?? '')) . '") ---');
 
 // ---- Authenticate the request --------------------------------------------
 // CLI (php cron.php KEY [daily]) or HTTP (?key=KEY[&task=daily]).

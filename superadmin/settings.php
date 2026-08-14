@@ -72,6 +72,13 @@ if (isset($_GET['test']) && $_GET['test'] === 'ai') {
     redirect('/superadmin/settings.php');
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'clear_log') {
+    csrf_verify();
+    \SportCard101\Diag::clear();
+    flash('success', 'Scan log cleared.');
+    redirect('/superadmin/settings.php');
+}
+
 // Run a scan synchronously, right now, and report exactly what happened.
 // Separates "the scan is broken" from "the schedule is broken".
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'run_scan') {
@@ -207,6 +214,21 @@ if ($cronLastRun) {
         <button class="btn btn-primary" type="submit">▶ Run a scan now (and show me what happens)</button>
         <span style="color:var(--muted);margin-left:8px"><small>Runs synchronously — you'll wait ~30s and see the result or the exact error.</small></span>
     </form>
+
+    <?php $tail = \SportCard101\Diag::tail(40); ?>
+    <details class="form-toggle" style="margin-top:12px"<?= $tail ? ' open' : '' ?>>
+        <summary class="btn">📄 Scan log<?= $tail ? ' (' . count($tail) . ' lines)' : ' — empty' ?></summary>
+        <?php if (!$tail): ?>
+            <p style="margin:10px 0 0;color:var(--muted)">Nothing logged yet. Run a scan (button above, or the cron URL) and the steps appear here — <strong>the last line is where it stopped</strong>.</p>
+        <?php else: ?>
+            <pre style="margin:10px 0 0;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow-x:auto;font-size:.8rem;line-height:1.5"><?= e(implode("\n", $tail)) ?></pre>
+            <form method="post" style="margin-top:8px"><?= csrf_field() ?>
+                <input type="hidden" name="action" value="clear_log">
+                <button class="btn btn-sm" type="submit">Clear log</button>
+                <span style="color:var(--muted);margin-left:8px"><small>Written to <?= e(\SportCard101\Diag::path()) ?></small></span>
+            </form>
+        <?php endif; ?>
+    </details>
 </div>
 
 <form method="post" class="card" style="max-width:780px"><?= csrf_field() ?>

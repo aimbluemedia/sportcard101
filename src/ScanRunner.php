@@ -50,15 +50,22 @@ final class ScanRunner
         $finder = new DealFinder($pdo, $ebay, (int)($config['deals']['scan_limit'] ?? 100), $ai);
 
         $started = microtime(true);
+        $t = fn () => round(microtime(true) - $started, 1) . 's';
+        Diag::log('SCAN START (uid ' . $uid . ', ebay ' . ($ebay->isMock() ? 'mock' : 'live')
+            . ', ai ' . ($ai->isMock() ? 'mock' : 'live') . ', limit ' . (string)@ini_get('max_execution_time') . 's)');
 
         // The core work, in priority order. The heartbeat is stamped as soon as
         // this completes — everything after it is a bonus, so a host time-limit
         // kill during the extras still leaves an accurate "last run" instead of
         // looking like the scan never happened.
         $newDeals = $finder->scanSelected($uid, null, null);
+        Diag::log('  channels scanned — ' . count($newDeals) . ' deals @ ' . $t());
         $recorded = Comps::recordClosed($pdo);     // lock in auctions that just closed
+        Diag::log('  comps recorded: ' . $recorded . ' @ ' . $t());
         $alerts   = DealAlerts::run($pdo);          // email comp-beating auctions FIRST
+        Diag::log('  deal alerts sent: ' . count($alerts) . ' @ ' . $t());
         $graded   = Playbook::gradeClosed($pdo);   // then grade picks (never blocks alerts)
+        Diag::log('  picks graded: ' . $graded . ' @ ' . $t());
 
         $coreSecs = round(microtime(true) - $started, 1);
         \set_setting('cron_last_run', date('Y-m-d H:i:s'));
@@ -76,10 +83,15 @@ final class ScanRunner
             $lastSweep = (int) (\setting('lots_last_sweep', '0') ?: 0);
             if (time() - $lastSweep >= self::LOT_SWEEP_INTERVAL) {
                 \set_setting('lots_last_sweep', (string) time());
+                Diag::log('  lot sweep starting… @ ' . $t());
                 $lots = LotFinder::scan($pdo, $ebay, $ai);
+                Diag::log('  lot sweep done: ' . $lots['found'] . ' found @ ' . $t());
+            } else {
+                Diag::log('  lot sweep skipped (2h cadence) @ ' . $t());
             }
             $lotAlerts = LotFinder::alert($pdo);
         } catch (\Throwable $e) {
+            Diag::log('  lots FAILED: ' . $e->getMessage());
         }
 
         // Possible error cards — no eBay calls, matches the catalog against
@@ -87,10 +99,13 @@ final class ScanRunner
         $errorAlerts = 0;
         try {
             $errorAlerts = ErrorCards::alert($pdo);
+            Diag::log('  error-card alerts: ' . $errorAlerts . ' @ ' . $t());
         } catch (\Throwable $e) {
+            Diag::log('  error cards FAILED: ' . $e->getMessage());
         }
 
         $secs = round(microtime(true) - $started, 1);
+        Diag::log('SCAN COMPLETE in ' . $secs . 's');
 
         return [
             'deals' => count($newDeals), 'comps' => $recorded, 'alerts' => count($alerts),
