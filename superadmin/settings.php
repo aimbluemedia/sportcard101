@@ -72,6 +72,26 @@ if (isset($_GET['test']) && $_GET['test'] === 'ai') {
     redirect('/superadmin/settings.php');
 }
 
+// Run a scan synchronously, right now, and report exactly what happened.
+// Separates "the scan is broken" from "the schedule is broken".
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'run_scan') {
+    csrf_verify();
+    @set_time_limit(300);
+    try {
+        if (!class_exists(\SportCard101\ScanRunner::class)) {
+            throw new \RuntimeException('ScanRunner class is missing — the latest code is not deployed.');
+        }
+        $r = \SportCard101\ScanRunner::run($pdo, $config);
+        flash('success', sprintf(
+            'Scan completed in %ss — %d deals flagged, %d sold comps, %d alerts sent, %d lots, %d error cards. The heartbeat below is now current.',
+            $r['secs'], $r['deals'], $r['comps'], $r['alerts'], $r['lots']['found'], $r['error_alerts']
+        ));
+    } catch (\Throwable $e) {
+        flash('error', 'Scan FAILED: ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
+    }
+    redirect('/superadmin/settings.php');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $stmt = $pdo->prepare('INSERT INTO settings (skey, sval) VALUES (?, ?) ON DUPLICATE KEY UPDATE sval = VALUES(sval)');
@@ -146,6 +166,47 @@ if ($cronLastRun) {
     <p style="margin:10px 0 0;color:var(--muted)"><small><strong>Most reliable option:</strong> an external cron service (e.g. cron-job.org) hitting
         <code>https://sportcard101.com/cron.php?key=YOUR_SECRET</code> every 30 minutes, and the same URL with <code>&amp;task=daily</code> once at 7am.
         It doesn't depend on the host's scheduler at all.</small></p>
+
+    <hr style="margin:18px 0 12px;border:0;border-top:1px solid var(--border)">
+    <?php
+    // --- Diagnostics: facts about THIS server, so scheduling problems can be
+    // diagnosed from the page instead of guessed at.
+    $deployed  = class_exists(\SportCard101\ScanRunner::class);
+    $disabled  = trim((string) @ini_get('disable_functions'));
+    $bootMtime = @filemtime(APP_ROOT . '/src/bootstrap.php');
+    $lockDir   = sys_get_temp_dir();
+    $diag = [
+        'Code deployed (ScanRunner present)' => $deployed ? '✓ yes' : '✕ NO — deploy the latest code',
+        'bootstrap.php last changed'         => $bootMtime ? date('M j, Y g:ia', $bootMtime) : 'unknown',
+        'PHP'                                => PHP_VERSION . ' (' . PHP_SAPI . ')',
+        'exec()'                             => function_exists('exec') ? '✓ available' : '✕ disabled',
+        'fastcgi_finish_request()'           => function_exists('fastcgi_finish_request') ? '✓ available' : '✕ missing',
+        'litespeed_finish_request()'         => function_exists('litespeed_finish_request') ? '✓ available' : '✕ missing',
+        'max_execution_time'                 => (string) @ini_get('max_execution_time') . 's',
+        'Lock dir writable'                  => is_writable($lockDir) ? '✓ ' . $lockDir : '✕ ' . $lockDir,
+        'Server time'                        => date('M j, Y g:ia T'),
+        'disable_functions'                  => $disabled === '' ? '(none)' : $disabled,
+    ];
+    ?>
+    <details class="form-toggle">
+        <summary class="btn">🩺 Server diagnostics</summary>
+        <div style="overflow-x:auto;margin-top:10px"><table>
+            <?php foreach ($diag as $k => $v): ?>
+            <tr>
+                <td style="white-space:nowrap;color:var(--muted)"><?= e($k) ?></td>
+                <td style="word-break:break-word"><?= e((string)$v) ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </table></div>
+        <p style="margin:10px 0 0;color:var(--muted)"><small>If "Code deployed" says NO, deploy first — everything else below it is stale. If both <code>exec()</code> and the two <code>finish_request</code> functions are unavailable, page traffic can't run scans on this host and an external cron service is the only fix.</small></p>
+    </details>
+
+    <form method="post" style="margin-top:12px" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Running scan… up to 60s, please wait';">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="run_scan">
+        <button class="btn btn-primary" type="submit">▶ Run a scan now (and show me what happens)</button>
+        <span style="color:var(--muted);margin-left:8px"><small>Runs synchronously — you'll wait ~30s and see the result or the exact error.</small></span>
+    </form>
 </div>
 
 <form method="post" class="card" style="max-width:780px"><?= csrf_field() ?>
