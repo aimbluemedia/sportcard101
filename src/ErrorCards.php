@@ -86,6 +86,55 @@ final class ErrorCards
             } catch (\Throwable $e2) {
             }
         }
+
+        // Candidates are derived from live listing titles rather than stored
+        // rows, so dismissing one has to be remembered or the next scan brings
+        // it straight back. Keyed by a hash because titles exceed index limits.
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS error_candidates_hidden (
+                id        BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                title_key CHAR(40) NOT NULL,
+                title     VARCHAR(512) NOT NULL,
+                hidden_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_title (title_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+        );
+    }
+
+    /** Stable key for a candidate listing title. */
+    private static function titleKey(string $title): string
+    {
+        return sha1(strtolower(trim($title)));
+    }
+
+    /** Hide one candidate from the list. Idempotent. */
+    public static function hideCandidate(PDO $pdo, string $title): void
+    {
+        if (trim($title) === '') {
+            return;
+        }
+        $pdo->prepare('INSERT IGNORE INTO error_candidates_hidden (title_key, title) VALUES (?, ?)')
+            ->execute([self::titleKey($title), mb_substr($title, 0, 500)]);
+    }
+
+    /** How many candidates are currently hidden. */
+    public static function hiddenCount(PDO $pdo): int
+    {
+        try {
+            return (int) $pdo->query('SELECT COUNT(*) FROM error_candidates_hidden')->fetchColumn();
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /** Un-hide everything, so dismissed candidates come back. */
+    public static function restoreCandidates(PDO $pdo): void
+    {
+        try {
+            $pdo->exec('DELETE FROM error_candidates_hidden');
+        } catch (\Throwable $e) {
+        }
     }
 
     /** URL-safe slug, uniqueness handled by the caller's retry. */
@@ -420,6 +469,22 @@ final class ErrorCards
             $rows = $stmt->fetchAll();
         } catch (\Throwable $e) {
             return [];
+        }
+        if (!$rows) {
+            return [];
+        }
+
+        // Drop anything dismissed by hand.
+        try {
+            $hidden = $pdo->query('SELECT title_key FROM error_candidates_hidden')->fetchAll(\PDO::FETCH_COLUMN);
+            if ($hidden) {
+                $hidden = array_flip($hidden);
+                $rows = array_values(array_filter(
+                    $rows,
+                    fn ($r) => !isset($hidden[self::titleKey((string)$r['title'])])
+                ));
+            }
+        } catch (\Throwable $e) {
         }
         if (!$rows) {
             return [];
