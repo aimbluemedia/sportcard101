@@ -54,7 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$res || !isset($res['c1'])) {
                 flash('error', 'The AI could not produce an explanation for that listing. Try another, or add it manually.');
             } else {
-                $newId = ErrorCards::insert($pdo, $res['c1'] + ['source' => 'MINED', 'status' => 'DRAFT']);
+                $newId = ErrorCards::insert($pdo, $res['c1'] + [
+                    'source'       => 'MINED',
+                    'status'       => 'DRAFT',
+                    'source_title' => $title, // so this candidate disappears once published
+                ]);
                 flash('success', 'Explained and added to your review queue — check the details below before publishing.');
                 redirect('/superadmin/errorcards.php?edit=' . $newId . '#manual');
             }
@@ -367,7 +371,7 @@ layout_header('Error Cards', 'admin');
 <?php if ($mined): ?>
 <div class="card">
     <h2 style="margin-top:0">⛏️ Candidates from your scan history (<?= count($mined) ?>)</h2>
-    <p class="sub" style="margin-bottom:12px">Listings your scanner already captured whose titles advertise an error or variation — free leads for new catalog entries.</p>
+    <p class="sub" style="margin-bottom:12px">Listings your scanner already captured whose titles advertise an error or variation — free leads for new catalog entries. Anything already covered by a <strong>published</strong> entry is hidden; drafts stay listed until you publish them.</p>
     <div style="overflow-x:auto"><table>
         <tr><th>Listing title</th><th>Price</th><th></th></tr>
         <?php foreach ($mined as $m): ?>
