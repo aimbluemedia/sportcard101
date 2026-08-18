@@ -63,6 +63,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 redirect('/superadmin/errorcards.php?edit=' . $newId . '#manual');
             }
         }
+    } elseif ($action === 'hide_candidate') {
+        ErrorCards::hideCandidate($pdo, (string)($_POST['title'] ?? ''));
+        flash('success', 'Candidate dismissed — it won\'t come back on future scans. Use "show dismissed" to undo.');
+    } elseif ($action === 'restore_candidates') {
+        ErrorCards::restoreCandidates($pdo);
+        flash('success', 'Dismissed candidates restored.');
     } elseif ($action === 'explain_missing') {
         // Backfill: explain catalog entries that have no write-up yet.
         $ai = new AiAnalyst(ai_config($config['ai']));
@@ -386,11 +392,23 @@ layout_header('Error Cards', 'admin');
                     <input type="hidden" name="title" value="<?= e((string)$m['title']) ?>">
                     <button class="btn btn-sm btn-primary" type="submit" title="Ask AI what this error is, and add it to the review queue">Learn more</button>
                 </form>
+                <form method="post" class="inline"><?= csrf_field() ?>
+                    <input type="hidden" name="action" value="hide_candidate">
+                    <input type="hidden" name="title" value="<?= e((string)$m['title']) ?>">
+                    <button class="btn btn-sm" type="submit" title="Not an error card worth cataloguing — hide it from this list for good">✕</button>
+                </form>
             </div></td>
         </tr>
         <?php endforeach; ?>
     </table></div>
-    <p style="margin:12px 0 0;color:var(--muted)"><small>"Learn more" asks Claude what the error is and files the explanation in your review queue. If it doesn't recognise an obscure one it will say so and score itself low rather than guess.</small></p>
+    <p style="margin:12px 0 0;color:var(--muted)"><small>"Learn more" asks Claude what the error is and files the explanation in your review queue. If it doesn't recognise an obscure one it will say so and score itself low rather than guess. <strong>✕</strong> dismisses a listing that isn't worth cataloguing — it stays hidden on future scans.</small></p>
+    <?php $hiddenCount = ErrorCards::hiddenCount($pdo); ?>
+    <?php if ($hiddenCount > 0): ?>
+    <form method="post" style="margin-top:8px"><?= csrf_field() ?>
+        <input type="hidden" name="action" value="restore_candidates">
+        <button class="btn btn-sm" type="submit">↩ Show <?= $hiddenCount ?> dismissed candidate<?= $hiddenCount === 1 ? '' : 's' ?> again</button>
+    </form>
+    <?php endif; ?>
 </div>
 <?php endif; ?>
 <?php
