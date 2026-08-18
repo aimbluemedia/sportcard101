@@ -76,6 +76,16 @@ final class ErrorCards
                 KEY idx_status (status, sport)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
         );
+        // Self-migrate: the scan-history title an entry was created from, so a
+        // catalogued candidate stops being offered as a candidate.
+        try {
+            $pdo->query('SELECT source_title FROM error_cards LIMIT 1');
+        } catch (\Throwable $e) {
+            try {
+                $pdo->exec('ALTER TABLE error_cards ADD COLUMN source_title VARCHAR(512) DEFAULT NULL AFTER search_terms');
+            } catch (\Throwable $e2) {
+            }
+        }
     }
 
     /** URL-safe slug, uniqueness handled by the caller's retry. */
@@ -103,8 +113,8 @@ final class ErrorCards
             'INSERT INTO error_cards
                 (slug, error_name, sport, year, set_name, card_number, player, error_type, description,
                  what_to_look_for, corrected_exists, scarcer, slab_label, premium_note, rarity_note,
-                 image_url, search_terms, confidence, source, status)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                 image_url, search_terms, source_title, confidence, source, status)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         );
         $stmt->execute([
             $slug,
@@ -118,6 +128,7 @@ final class ErrorCards
             $d['slab_label'] ?? null, $d['premium_note'] ?? null, $d['rarity_note'] ?? null,
             $d['image_url'] ?? null,
             mb_substr((string)($d['search_terms'] ?? ''), 0, 490) ?: null,
+            mb_substr((string)($d['source_title'] ?? ''), 0, 500) ?: null,
             isset($d['confidence']) ? max(0, min(100, (int)$d['confidence'])) : null,
             in_array($d['source'] ?? 'MANUAL', ['AI', 'MANUAL', 'MINED', 'MEMBER'], true) ? $d['source'] : 'MANUAL',
             isset(self::STATUSES[$d['status'] ?? '']) ? $d['status'] : 'DRAFT',
@@ -209,15 +220,22 @@ final class ErrorCards
             }
             foreach ($entries as $e) {
                 $player = strtolower((string)($e['player'] ?? ''));
+                $year   = (string) ($e['year'] ?? '');
+                $terms  = self::terms($e);
+
+                // An entry with no player, no year and no search terms cannot
+                // identify anything — it would otherwise match EVERY listing and
+                // flood the error alerts. Skip it until it's filled in.
+                if ($player === '' && $year === '' && !$terms) {
+                    continue;
+                }
                 // Player must appear — keeps "error" keywords from matching everything.
                 if ($player !== '' && !str_contains($t, $player)) {
                     continue;
                 }
-                $year = (string)($e['year'] ?? '');
                 if ($year !== '' && !str_contains($t, $year)) {
                     continue;
                 }
-                $terms = self::terms($e);
                 $hasTerm = !$terms; // no terms configured => player+year is enough
                 foreach ($terms as $term) {
                     if ($term !== '' && str_contains($t, $term)) {
@@ -391,16 +409,43 @@ final class ErrorCards
         $like = ['%error%', '%misprint%', '%no name on front%', '%upside down%', '%wrong back%', '%variation%', '%missing name%'];
         $sql  = implode(' OR ', array_fill(0, count($like), 'l.title LIKE ?'));
         try {
+            // Over-fetch: some rows get filtered out below as already catalogued.
             $stmt = $pdo->prepare(
                 "SELECT DISTINCT l.title, l.price, l.item_url, s.keywords AS sport
                  FROM listings l JOIN searches s ON s.id = l.search_id
                  WHERE ($sql)
-                 ORDER BY l.last_seen_at DESC LIMIT " . (int)$limit
+                 ORDER BY l.last_seen_at DESC LIMIT " . (int)max(200, $limit * 5)
             );
             $stmt->execute($like);
-            return $stmt->fetchAll();
+            $rows = $stmt->fetchAll();
         } catch (\Throwable $e) {
             return [];
         }
+        if (!$rows) {
+            return [];
+        }
+
+        // Drop candidates already covered by a PUBLISHED entry — two ways, so
+        // nothing lingers: the exact title an entry was created from, and any
+        // title the catalog matcher recognises. Drafts stay listed, since they
+        // aren't catalogued until you publish them.
+        $published = self::published($pdo, null, null, null, 500);
+        if ($published) {
+            $done = [];
+            foreach ($published as $e) {
+                $src = strtolower(trim((string)($e['source_title'] ?? '')));
+                if ($src !== '') {
+                    $done[$src] = true;
+                }
+            }
+            foreach (self::matchListings($pdo, $rows, $published) as $hit) {
+                $done[strtolower(trim((string)$hit['listing']['title']))] = true;
+            }
+            $rows = array_values(array_filter(
+                $rows,
+                fn ($r) => !isset($done[strtolower(trim((string)$r['title']))])
+            ));
+        }
+        return array_slice($rows, 0, $limit);
     }
 }
