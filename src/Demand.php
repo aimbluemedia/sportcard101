@@ -180,6 +180,92 @@ final class Demand
     }
 
     /**
+     * Every recorded sale of one card, oldest first, plus summary figures.
+     * This is what turns a leaderboard row into a judgement: a card averaging
+     * 45 bids across 12 sales is liquid money; the same average from one sale
+     * is a coincidence.
+     *
+     * @return array{sales:array,summary:array}|null
+     */
+    public static function cardProfile(PDO $pdo, ?string $sport, ?string $grade, string $cardKey): ?array
+    {
+        if ($cardKey === '') {
+            return null;
+        }
+        try {
+            $stmt = $pdo->prepare(
+                'SELECT canonical_card, title, sport, grade, final_price, final_bids, currency,
+                        image_url, item_url, closed_at
+                 FROM sold_comps
+                 WHERE sport <=> ? AND grade <=> ? AND card_key = ?
+                 ORDER BY closed_at ASC
+                 LIMIT 500'
+            );
+            $stmt->execute([$sport, $grade, $cardKey]);
+            $sales = $stmt->fetchAll();
+        } catch (\Throwable $e) {
+            return null;
+        }
+        if (!$sales) {
+            return null;
+        }
+
+        $prices = array_map(fn ($s) => (float)$s['final_price'], $sales);
+        $bids   = array_map(fn ($s) => (int)$s['final_bids'], $sales);
+        sort($prices);
+        $n   = count($prices);
+        $mid = intdiv($n, 2);
+
+        // Trend: median of the older half vs the newer half, in time order.
+        $trend = null;
+        if ($n >= 4) {
+            $chrono = array_map(fn ($s) => (float)$s['final_price'], $sales);
+            $half   = intdiv($n, 2);
+            $med = function (array $v): float {
+                sort($v);
+                $c = count($v);
+                $m = intdiv($c, 2);
+                return $c % 2 ? $v[$m] : ($v[$m - 1] + $v[$m]) / 2;
+            };
+            $older = $med(array_slice($chrono, 0, $half));
+            $newer = $med(array_slice($chrono, $half));
+            if ($older > 0) {
+                $trend = round((($newer - $older) / $older) * 100, 1);
+            }
+        }
+
+        // Typical gap between sales — how often one actually comes up.
+        $gapDays = null;
+        if ($n >= 2) {
+            $first = strtotime((string)$sales[0]['closed_at']);
+            $last  = strtotime((string)$sales[$n - 1]['closed_at']);
+            if ($first && $last && $last > $first) {
+                $gapDays = round((($last - $first) / 86400) / ($n - 1), 1);
+            }
+        }
+
+        return [
+            'sales'   => $sales,
+            'summary' => [
+                'count'      => $n,
+                'median'     => $n % 2 ? $prices[$mid] : ($prices[$mid - 1] + $prices[$mid]) / 2,
+                'low'        => $prices[0],
+                'high'       => $prices[$n - 1],
+                'avg_bids'   => round(array_sum($bids) / $n, 1),
+                'max_bids'   => max($bids),
+                'trend'      => $trend,
+                'gap_days'   => $gapDays,
+                'first_seen' => $sales[0]['closed_at'],
+                'last_seen'  => $sales[$n - 1]['closed_at'],
+                'card'       => $sales[$n - 1]['canonical_card'] ?: $sales[$n - 1]['title'],
+                'title'      => $sales[$n - 1]['title'],
+                'image_url'  => $sales[$n - 1]['image_url'],
+                'currency'   => $sales[$n - 1]['currency'] ?: 'USD',
+            ],
+        ];
+    }
+
+    /**
      * Size and reach of the archive, for the "what have I actually collected"
      * header: total sales, how many were heavily contested, and the span.
      */

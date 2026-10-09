@@ -29,9 +29,92 @@ function hb_url(array $changes = []): string
         'tab'   => $_GET['tab']   ?? null,
         'sort'  => $_GET['sort']  ?? null,
         'page'  => $_GET['page']  ?? null,
+        'card'  => $_GET['card']  ?? null,
+        'cs'    => $_GET['cs']    ?? null,
+        'cg'    => $_GET['cg']    ?? null,
     ], $changes);
     $p = array_filter($p, fn ($v) => $v !== null && $v !== '');
     return '/superadmin/highbids.php' . ($p ? '?' . http_build_query($p) : '');
+}
+
+/** Link to one card's demand profile. */
+function hb_profile_url(?string $sport, ?string $grade, ?string $cardKey): string
+{
+    return '/superadmin/highbids.php?' . http_build_query([
+        'card' => (string)$cardKey, 'cs' => (string)$sport, 'cg' => (string)$grade,
+    ]);
+}
+
+// ---- Per-card demand profile (its own view) ------------------------------
+$cardKey = trim((string)($_GET['card'] ?? ''));
+if ($cardKey !== '') {
+    $cs = ($_GET['cs'] ?? '') !== '' ? (string)$_GET['cs'] : null;
+    $cg = ($_GET['cg'] ?? '') !== '' ? (string)$_GET['cg'] : null;
+    $profile = Demand::cardProfile($pdo, $cs, $cg, $cardKey);
+
+    layout_header('Card demand', 'admin');
+    echo '<p style="margin:0 0 6px"><a href="' . e(hb_url(['card' => null, 'cs' => null, 'cg' => null])) . '">‹ Back to High Bids</a></p>';
+
+    if (!$profile) {
+        echo '<div class="empty" style="padding:40px">No recorded sales for that card.</div>';
+        layout_footer();
+        return;
+    }
+
+    $s        = $profile['summary'];
+    $sales    = $profile['sales'];
+    $maxPrice = max(1.0, (float)$s['high']);
+    $cur      = $s['currency'];
+    ?>
+    <h1>📈 <?= e((string)$s['card']) ?></h1>
+    <p class="sub"><?= e(trim(($SPORTS[$cs]['label'] ?? (string)$cs) . ' · ' . (string)$cg)) ?>
+        · every sale we've recorded, oldest first</p>
+
+    <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start">
+            <?php if ($s['image_url']): ?>
+                <img src="<?= e((string)$s['image_url']) ?>" alt="" loading="lazy" style="width:90px;border-radius:8px">
+            <?php endif; ?>
+            <div><small style="color:var(--muted)">Recorded sales</small><br><strong style="font-size:1.3rem"><?= (int)$s['count'] ?></strong></div>
+            <div><small style="color:var(--muted)">Median price</small><br><strong style="font-size:1.3rem"><?= e(money((float)$s['median'], $cur)) ?></strong></div>
+            <div><small style="color:var(--muted)">Range</small><br><strong style="font-size:1.1rem"><?= e(money((float)$s['low'], $cur)) ?> – <?= e(money((float)$s['high'], $cur)) ?></strong></div>
+            <div><small style="color:var(--muted)">Avg bids</small><br><strong style="font-size:1.3rem;color:var(--red)">🔨 <?= e((string)$s['avg_bids']) ?></strong>
+                <small style="color:var(--muted)">peak <?= (int)$s['max_bids'] ?></small></div>
+            <div><small style="color:var(--muted)">Price trend</small><br>
+                <?php if ($s['trend'] === null): ?><strong style="font-size:1.1rem;color:var(--muted)">—</strong><small style="color:var(--muted)"> needs 4+ sales</small>
+                <?php else: $t = (float)$s['trend']; ?>
+                    <strong style="font-size:1.3rem;color:<?= $t > 5 ? '#1d7d46' : ($t < -5 ? '#e05555' : 'var(--muted)') ?>">
+                        <?= $t > 0 ? '▲ +' : ($t < 0 ? '▼ ' : '→ ') ?><?= e((string)$t) ?>%</strong>
+                <?php endif; ?></div>
+            <div><small style="color:var(--muted)">One comes up every</small><br><strong style="font-size:1.3rem"><?= $s['gap_days'] !== null ? e((string)$s['gap_days']) . ' days' : '—' ?></strong></div>
+        </div>
+        <p style="margin:12px 0 0;color:var(--muted)"><small>Trend compares the median of the older half of these sales against the newer half. "One comes up every" is the average gap between recorded sales — the practical measure of how often you get a shot at this card.</small></p>
+        <p style="margin:12px 0 0;display:flex;gap:8px;flex-wrap:wrap">
+            <a class="btn btn-primary" href="<?= e(epn_search_link((string)$s['title'])) ?>" target="_blank" rel="noopener">Find one on eBay →</a>
+            <a class="btn" href="<?= e(ebay_sold_link((string)$s['card'])) ?>" target="_blank" rel="noopener">Recent sold prices ›</a>
+        </p>
+    </div>
+
+    <div class="card">
+        <h2 style="margin-top:0">Sale history (<?= count($sales) ?>)</h2>
+        <div style="overflow-x:auto"><table>
+            <tr><th>Closed</th><th>Price</th><th>Bids</th><th style="width:45%">Relative price</th><th></th></tr>
+            <?php foreach (array_reverse($sales) as $sale):
+                $pct = max(2, (int)round(((float)$sale['final_price'] / $maxPrice) * 100)); ?>
+            <tr>
+                <td style="white-space:nowrap"><?= e(date('M j, Y', strtotime((string)$sale['closed_at']))) ?></td>
+                <td style="white-space:nowrap"><strong><?= e(money((float)$sale['final_price'], $sale['currency'])) ?></strong></td>
+                <td style="white-space:nowrap">🔨 <?= (int)$sale['final_bids'] ?></td>
+                <td><div style="background:var(--panel-2);border-radius:5px;height:14px;width:100%">
+                    <div style="background:var(--accent);height:14px;border-radius:5px;width:<?= $pct ?>%"></div></div></td>
+                <td><a class="btn btn-sm" href="<?= e(epn_link((string)$sale['item_url'])) ?>" target="_blank" rel="noopener">Listing</a></td>
+            </tr>
+            <?php endforeach; ?>
+        </table></div>
+    </div>
+    <?php
+    layout_footer();
+    return;
 }
 
 // ---- Live auctions drawing heavy interest --------------------------------
@@ -90,7 +173,12 @@ function hb_sale_card(array $c, array $SPORTS): void
             <span class="trend-down" style="color:var(--red)">🔥 <?= (int)$c['final_bids'] ?> bids</span>
         </div>
         <div class="comp-range">Closed <?= $c['closed_at'] ? e(date('M j, Y', strtotime((string)$c['closed_at']))) : '—' ?></div>
-        <a class="btn btn-sm comp-find" href="<?= e(epn_search_link($c['title'])) ?>" target="_blank" rel="noopener">Find similar →</a>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <?php if (!empty($c['card_key'])): ?>
+                <a class="btn btn-sm" href="<?= e(hb_profile_url($c['sport'], $c['grade'], $c['card_key'])) ?>">History</a>
+            <?php endif; ?>
+            <a class="btn btn-sm comp-find" href="<?= e(epn_search_link($c['title'])) ?>" target="_blank" rel="noopener">Find similar →</a>
+        </div>
     </div>
     <?php
 }
@@ -202,7 +290,7 @@ layout_header('High Bids', 'admin');
             <?php foreach ($contested as $i => $c): ?>
             <tr>
                 <td style="color:var(--muted)"><?= $i + 1 ?></td>
-                <td style="max-width:320px"><strong><?= e($c['canonical_card'] ?: $c['title']) ?></strong><br>
+                <td style="max-width:320px"><strong><a href="<?= e(hb_profile_url($c['sport'], $c['grade'], $c['card_key'])) ?>"><?= e($c['canonical_card'] ?: $c['title']) ?></a></strong><br>
                     <small style="color:var(--muted)"><?= e(trim(($SPORTS[$c['sport']]['label'] ?? (string)$c['sport']) . ' · ' . (string)$c['grade'])) ?></small></td>
                 <td style="white-space:nowrap"><strong style="color:var(--red)"><?= (int)$c['hot_sales'] ?></strong>
                     <?php if (!empty($c['total_sales'])): ?><small style="color:var(--muted)"> / <?= (int)$c['total_sales'] ?> total</small><?php endif; ?></td>
@@ -212,7 +300,7 @@ layout_header('High Bids', 'admin');
                     ? '<strong>' . e(money((float)$c['median_price'], $c['currency'])) . '</strong>'
                     : e(money((float)$c['avg_price'], $c['currency'])) . ' <small style="color:var(--muted)">avg</small>' ?></td>
                 <td style="white-space:nowrap"><?= $c['last_sold'] ? e(date('M j, Y', strtotime((string)$c['last_sold']))) : '—' ?></td>
-                <td><a class="btn btn-sm" href="<?= e(epn_search_link($c['title'])) ?>" target="_blank" rel="noopener">Find one →</a></td>
+                <td><div style="display:flex;gap:6px"><a class="btn btn-sm" href="<?= e(hb_profile_url($c['sport'], $c['grade'], $c['card_key'])) ?>">History</a><a class="btn btn-sm" href="<?= e(epn_search_link($c['title'])) ?>" target="_blank" rel="noopener">Find one →</a></div></td>
             </tr>
             <?php endforeach; ?>
         </table></div>
@@ -229,7 +317,7 @@ layout_header('High Bids', 'admin');
                 <?php foreach ($topBids as $i => $c): ?>
                 <tr>
                     <td style="color:var(--muted)"><?= $i + 1 ?></td>
-                    <td style="max-width:260px"><?= e($c['canonical_card'] ?: $c['title']) ?><br>
+                    <td style="max-width:260px"><a href="<?= e(hb_profile_url($c['sport'], $c['grade'], $c['card_key'])) ?>"><?= e($c['canonical_card'] ?: $c['title']) ?></a><br>
                         <small style="color:var(--muted)"><?= e(date('M j, Y', strtotime((string)$c['closed_at']))) ?></small></td>
                     <td style="white-space:nowrap"><strong style="color:var(--red)"><?= (int)$c['final_bids'] ?></strong></td>
                     <td style="white-space:nowrap"><?= e(money((float)$c['final_price'], $c['currency'])) ?></td>
@@ -248,7 +336,7 @@ layout_header('High Bids', 'admin');
                 <?php foreach ($topPrice as $i => $c): ?>
                 <tr>
                     <td style="color:var(--muted)"><?= $i + 1 ?></td>
-                    <td style="max-width:260px"><?= e($c['canonical_card'] ?: $c['title']) ?><br>
+                    <td style="max-width:260px"><a href="<?= e(hb_profile_url($c['sport'], $c['grade'], $c['card_key'])) ?>"><?= e($c['canonical_card'] ?: $c['title']) ?></a><br>
                         <small style="color:var(--muted)"><?= e(date('M j, Y', strtotime((string)$c['closed_at']))) ?></small></td>
                     <td style="white-space:nowrap"><strong><?= e(money((float)$c['final_price'], $c['currency'])) ?></strong></td>
                     <td style="white-space:nowrap">🔨 <?= (int)$c['final_bids'] ?></td>
