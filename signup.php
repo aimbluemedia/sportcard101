@@ -14,11 +14,19 @@ $ref  = isset($_GET['ref']) ? preg_replace('/[^A-Z0-9]/', '', strtoupper((string
 $plan = isset($_GET['plan']) ? (string)$_GET['plan'] : null;
 $error = null;
 
+// The homepage hero captures an email first, then sends it here as ?email=.
+// Keep it (and anything retyped after a failed submit) in the field.
+$emailPrefill = trim((string)($_GET['email'] ?? ''));
+if ($emailPrefill !== '' && !filter_var($emailPrefill, FILTER_VALIDATE_EMAIL)) {
+    $emailPrefill = '';
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $username = trim((string)($_POST['username'] ?? ''));
     $email    = trim((string)($_POST['email'] ?? ''));
     $password = (string)($_POST['password'] ?? '');
+    $emailPrefill = $email;
     $ref      = ($_POST['ref'] ?? '') !== '' ? preg_replace('/[^A-Z0-9]/', '', strtoupper((string)$_POST['ref'])) : null;
 
     if ($username === '' || $email === '' || strlen($password) < 8) {
@@ -65,7 +73,7 @@ layout_header('Join', 'public');
             <label for="username">Username</label>
             <input id="username" name="username" autocomplete="username" required>
             <label for="email">Email</label>
-            <input id="email" name="email" type="email" autocomplete="email" required>
+            <input id="email" name="email" type="email" autocomplete="email" value="<?= e($emailPrefill) ?>" required>
             <label for="password">Password <small>(8+ characters)</small></label>
             <input id="password" name="password" type="password" autocomplete="new-password" required>
             <?php if ($ref): ?><p class="sub" style="margin-top:10px">Referred by <strong><?= e($ref) ?></strong> 🎉</p><?php endif; ?>

@@ -16,8 +16,8 @@ Auth::requireAdmin();
  */
 $siteFields = [
     'site_url'               => ['Site URL (for referral links)', 'text'],
-    'hero_title'             => ['Homepage headline', 'text'],
-    'hero_subtitle'          => ['Homepage subtitle', 'textarea'],
+    'hero_title'             => ['Homepage headline — wrap words in *asterisks* to highlight them', 'text'],
+    'hero_subtitle'          => ['Homepage subtitle — *asterisks* make text bold. Leave blank for the default.', 'textarea'],
     'skool_url'              => ['Skool community URL', 'text'],
     'enable_member_searches' => ['Let members run their own AI searches (1 = on, 0 = off)', 'text'],
     'cron_key'               => ['Cron secret key (for automatic scanning via cron.php)', 'text'],

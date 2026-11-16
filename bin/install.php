@@ -49,8 +49,8 @@ if ((int)$pdo->query('SELECT COUNT(*) FROM plans')->fetchColumn() === 0) {
 $set = $pdo->prepare('INSERT IGNORE INTO settings (skey, sval) VALUES (?, ?)');
 foreach ([
     'site_url'   => 'https://sportcard101.com',
-    'hero_title' => 'Learn to find and flip sports cards — with AI.',
-    'hero_subtitle' => 'SportCard101 teaches you the hobby and hands you an AI engine that spots underpriced PSA 10 deals on eBay before everyone else.',
+    'hero_title' => 'Sports cards are a *real business*. Most people just bid blind.',
+    'hero_subtitle' => 'SportCard101 watches the graded-card auctions all day, prices every card against what it actually sold for, and tells you the one number that decides whether you make money: *your maximum bid*.',
     'skool_url'  => '',
     'enable_member_searches' => '0',
 ] as $k => $v) {
