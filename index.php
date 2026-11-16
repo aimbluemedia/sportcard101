@@ -192,11 +192,31 @@ $tools = [
             <div class="hm-photo">
                 <picture>
                     <source srcset="/assets/img/hero-desk.webp" type="image/webp">
-                    <img src="/assets/img/hero-desk.jpg" width="748" height="748" loading="eager" decoding="async"
+                    <img src="/assets/img/hero-desk.jpg" width="658" height="822" loading="eager" decoding="async"
                          alt="A seller at a desk with graded cards on the shelves behind, a laptop, card savers and a packed shipping box.">
                 </picture>
             </div>
 
+            <!-- a new deal lands -->
+            <div class="hm-chip hm-chip-new">
+                <span class="ic dark">⚡</span>
+                <span class="tx">New deal · <b>PSA 10 Luka RC</b></span>
+            </div>
+
+            <!-- the free daily email -->
+            <div class="hm-chip hm-chip-mail">
+                <span class="hd"><span class="ic green">✉</span> Daily email sent</span>
+                <p>3 cards cleared to buy, 8 to watch and 2 new error cards.</p>
+                <span class="ft"><em>Free tier</em> <span>7:00am today</span></span>
+            </div>
+
+            <!-- the clock that makes it urgent -->
+            <div class="hm-chip hm-chip-time">
+                <span class="ic red">⏱</span>
+                <span class="tx">Ends in <b>4h 12m</b></span>
+            </div>
+
+            <!-- the number that decides it -->
             <div class="hm-call">
                 <span class="k"><span class="dot"></span> Today's top call <em>sample</em></span>
                 <span class="nm">2018 Prizm Luka Dončić RC</span>
@@ -204,14 +224,6 @@ $tools = [
                 <span class="row">
                     <span class="bid"><span class="lbl">Your max bid</span><span class="v">$412</span></span>
                     <span class="pl">+$89 net</span>
-                </span>
-            </div>
-
-            <div class="hm-float">
-                <span class="ico">📧</span>
-                <span class="tx">
-                    <span class="a">Your daily email landed</span>
-                    <span class="b">3 buys · 8 to watch · 2 new error cards</span>
                 </span>
             </div>
         </div>

@@ -8,6 +8,25 @@ use SportCard101\Auth;
 
 Auth::requireAdmin();
 
+/*
+ * One-time: the installer seeded the monthly plan at $19 and the site now
+ * sells at $9. This only touches a plan still sitting on that seeded price,
+ * and only runs once, so a price an admin sets deliberately is never
+ * overwritten. Same statement as migrations/2026_price_9.sql.
+ */
+if (setting('price_9_applied', '') === '') {
+    try {
+        $fix = $pdo->prepare("UPDATE plans SET price_cents = 900 WHERE price_cents = 1900 AND bill_interval = 'month'");
+        $fix->execute();
+        set_setting('price_9_applied', date('Y-m-d H:i:s'));
+        if ($fix->rowCount() > 0) {
+            flash('success', 'Monthly membership is now $9 (was $19). Change it any time under Pricing.');
+        }
+    } catch (\Throwable $e) {
+        // Pricing is editable by hand; never break the dashboard over this.
+    }
+}
+
 $one = fn (string $sql): int => (int)$pdo->query($sql)->fetchColumn();
 $stats = [
     'Members'        => $one("SELECT COUNT(*) FROM users WHERE role='member'"),
