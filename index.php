@@ -130,7 +130,7 @@ $tools = [
 <meta property="og:title" content="SportCard101 — build a business flipping graded sports cards">
 <meta property="og:description" content="<?= e($metaDesc) ?>">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#080b11">
+<meta name="theme-color" content="#ffffff">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -151,10 +151,10 @@ $tools = [
         </nav>
         <div class="hm-nav-cta">
             <?php if ($loggedIn): ?>
-                <a class="hm-btn hm-btn-gold hm-btn-sm" href="/member/">Members area →</a>
+                <a class="hm-btn hm-btn-primary hm-btn-sm" href="/member/">Members area →</a>
             <?php else: ?>
                 <a class="hm-btn hm-btn-ghost hm-btn-sm" href="/login.php">Log in</a>
-                <a class="hm-btn hm-btn-gold hm-btn-sm" href="/signup.php">Join free</a>
+                <a class="hm-btn hm-btn-primary hm-btn-sm" href="/signup.php">Join free</a>
             <?php endif; ?>
         </div>
     </div>
@@ -177,7 +177,7 @@ $tools = [
             <div class="hm-capture">
                 <form method="get" action="/signup.php">
                     <input type="email" name="email" placeholder="you@email.com" aria-label="Your email address" required>
-                    <button class="hm-btn hm-btn-gold" type="submit">Get the daily email — free</button>
+                    <button class="hm-btn hm-btn-primary" type="submit">Get the daily email — free</button>
                 </form>
                 <p class="hm-capture-note">
                     <span>Free forever tier</span>
@@ -187,58 +187,24 @@ $tools = [
             </div>
         </div>
 
-        <!-- product mock -->
-        <div class="hm-mock">
-            <div class="hm-mock-shell">
-                <div class="hm-mock-bar">
-                    <span class="lights"><i></i><i></i><i></i></span>
-                    <span class="t">sportcard101.com / <b>daily plan</b></span>
-                    <span class="tag">Sample</span>
-                </div>
+        <!-- shop photo, with today's top call and the email receipt floating over it -->
+        <div class="hm-shot">
+            <div class="hm-photo">
+                <picture>
+                    <source srcset="/assets/img/hero-desk.webp" type="image/webp">
+                    <img src="/assets/img/hero-desk.jpg" width="748" height="748" loading="eager" decoding="async"
+                         alt="A seller at a desk with graded cards on the shelves behind, a laptop, card savers and a packed shipping box.">
+                </picture>
+            </div>
 
-                <div class="hm-mock-head">
-                    <h4><span class="dot"></span> Morning Playbook</h4>
-                    <p class="hm-mock-stats">
-                        <span><b>1,482</b> listings scanned</span>
-                        <span><b>9</b> flagged</span>
-                        <span><b>3</b> cleared to buy</span>
-                    </p>
-                </div>
-
-                <div class="hm-mock-rows">
-                    <div class="hm-row">
-                        <span class="rank">1</span>
-                        <span class="who">
-                            <span class="nm">2018 Prizm Luka Dončić RC #280</span>
-                            <span class="mt"><span class="g">PSA 10</span> <span>median $578 · 11 comps</span></span>
-                        </span>
-                        <span class="max"><span class="lbl">Max bid</span><span class="v">$412</span></span>
-                        <span class="pl">+$89</span>
-                    </div>
-                    <div class="hm-row">
-                        <span class="rank">2</span>
-                        <span class="who">
-                            <span class="nm">2000 Bowman Chrome Brady RC #236</span>
-                            <span class="mt"><span class="g">BGS 9</span> <span>median $1,240 · 7 comps</span></span>
-                        </span>
-                        <span class="max"><span class="lbl">Max bid</span><span class="v">$905</span></span>
-                        <span class="pl">+$170</span>
-                    </div>
-                    <div class="hm-row">
-                        <span class="rank">3</span>
-                        <span class="who">
-                            <span class="nm">1989 Upper Deck Ken Griffey Jr. RC #1</span>
-                            <span class="mt"><span class="g">PSA 9</span> <span>median $96 · 24 comps</span></span>
-                        </span>
-                        <span class="max"><span class="lbl">Max bid</span><span class="v">$61</span></span>
-                        <span class="pl">+$17</span>
-                    </div>
-                </div>
-
-                <div class="hm-mock-foot">
-                    <span>Fees and shipping already taken off the top</span>
-                    <span class="pb">Sent 7:00am</span>
-                </div>
+            <div class="hm-call">
+                <span class="k"><span class="dot"></span> Today's top call <em>sample</em></span>
+                <span class="nm">2018 Prizm Luka Dončić RC</span>
+                <span class="mt">PSA 10 · median $578 across 11 sales</span>
+                <span class="row">
+                    <span class="bid"><span class="lbl">Your max bid</span><span class="v">$412</span></span>
+                    <span class="pl">+$89 net</span>
+                </span>
             </div>
 
             <div class="hm-float">
@@ -267,7 +233,7 @@ $tools = [
 </section>
 
 <!-- ===================== HOW IT WORKS ===================== -->
-<section class="hm-sec on-paper" id="how">
+<section class="hm-sec on-soft" id="how">
     <div class="hm-wrap">
         <div class="hm-sec-head">
             <p class="hm-eyebrow">How it works</p>
@@ -278,45 +244,106 @@ $tools = [
             </p>
         </div>
 
-        <div class="hm-steps-grid">
-            <article class="hm-step">
-                <span class="n">1</span>
-                <h3><em>Find</em> what's underpriced</h3>
-                <p>
-                    The engine pulls live graded auctions around the clock and runs every listing
-                    through AI that reads the player, year, set, parallel, rookie status and grade
-                    out of titles humans wrote badly on purpose.
-                </p>
-                <div class="uses"><i>Auction Board</i><i>Snap Shot</i><i>Bulk Lots</i></div>
-            </article>
+        <div class="hm-how-grid">
+            <!-- what the Morning Playbook actually looks like -->
+            <div class="hm-panel">
+                <div class="hm-mock-bar">
+                    <span class="lights"><i></i><i></i><i></i></span>
+                    <span class="t">sportcard101.com / <b>daily plan</b></span>
+                    <span class="tag">Sample</span>
+                </div>
 
-            <article class="hm-step">
-                <span class="n">2</span>
-                <h3><em>Price</em> it against reality</h3>
-                <p>
-                    Every card gets matched to the prices it actually closed at — by grade, not
-                    by wishful thinking. You see the median, the floor and the ceiling, and how
-                    many sales that number rests on.
-                </p>
-                <div class="uses"><i>Sold Comps</i><i>High Bids</i><i>Demand Profiles</i></div>
-            </article>
+                <div class="hm-mock-head">
+                    <h4><span class="dot"></span> Morning Playbook</h4>
+                    <p class="hm-mock-stats">
+                        <span><b>1,482</b> listings scanned</span>
+                        <span><b>9</b> flagged</span>
+                        <span><b>3</b> cleared to buy</span>
+                    </p>
+                </div>
 
-            <article class="hm-step">
-                <span class="n">3</span>
-                <h3><em>Flip</em> it with a hard ceiling</h3>
-                <p>
-                    Selling fees and shipping come off the top, your target margin comes out next,
-                    and what is left is your max bid. Bid it or walk away. That discipline
-                    <em>is</em> the business.
-                </p>
-                <div class="uses"><i>Morning Playbook</i><i>My Collection</i><i>Alerts</i></div>
-            </article>
+                <div class="hm-mock-rows">
+                    <div class="hm-row">
+                        <span class="rank">1</span>
+                        <span class="who">
+                            <span class="nm">2018 Prizm Luka Dončić RC #280</span>
+                            <span class="mt"><span class="g">PSA 10</span> <span>median $578 · 11 sales</span></span>
+                        </span>
+                        <span class="max"><span class="lbl">Max bid</span><span class="v">$412</span></span>
+                        <span class="pl">+$89</span>
+                    </div>
+                    <div class="hm-row">
+                        <span class="rank">2</span>
+                        <span class="who">
+                            <span class="nm">2000 Bowman Chrome Brady RC #236</span>
+                            <span class="mt"><span class="g">BGS 9</span> <span>median $1,240 · 7 sales</span></span>
+                        </span>
+                        <span class="max"><span class="lbl">Max bid</span><span class="v">$905</span></span>
+                        <span class="pl">+$170</span>
+                    </div>
+                    <div class="hm-row">
+                        <span class="rank">3</span>
+                        <span class="who">
+                            <span class="nm">1989 Upper Deck Ken Griffey Jr. RC #1</span>
+                            <span class="mt"><span class="g">PSA 9</span> <span>median $96 · 24 sales</span></span>
+                        </span>
+                        <span class="max"><span class="lbl">Max bid</span><span class="v">$61</span></span>
+                        <span class="pl">+$17</span>
+                    </div>
+                </div>
+
+                <div class="hm-mock-foot">
+                    <span>Fees and shipping already taken off the top</span>
+                    <span class="pb">Sent 7:00am</span>
+                </div>
+            </div>
+
+            <div class="hm-steps-stack">
+                <article class="hm-step">
+                    <span class="n">1</span>
+                    <div>
+                        <h3><em>Find</em> what's underpriced</h3>
+                        <p>
+                            The engine pulls live graded auctions around the clock and runs every
+                            listing through AI that reads the player, year, set, parallel, rookie
+                            status and grade out of titles humans wrote badly on purpose.
+                        </p>
+                        <div class="uses"><i>Auction Board</i><i>Snap Shot</i><i>Bulk Lots</i></div>
+                    </div>
+                </article>
+
+                <article class="hm-step">
+                    <span class="n">2</span>
+                    <div>
+                        <h3><em>Price</em> it against reality</h3>
+                        <p>
+                            Every card gets matched to the prices it actually closed at — by grade,
+                            not by wishful thinking. You see the median, the floor and the ceiling,
+                            and how many sales that number rests on.
+                        </p>
+                        <div class="uses"><i>Sold Comps</i><i>High Bids</i><i>Demand Profiles</i></div>
+                    </div>
+                </article>
+
+                <article class="hm-step">
+                    <span class="n">3</span>
+                    <div>
+                        <h3><em>Flip</em> it with a hard ceiling</h3>
+                        <p>
+                            Selling fees and shipping come off the top, your target margin comes out
+                            next, and what is left is your max bid. Bid it or walk away. That
+                            discipline <em>is</em> the business.
+                        </p>
+                        <div class="uses"><i>Morning Playbook</i><i>My Collection</i><i>Alerts</i></div>
+                    </div>
+                </article>
+            </div>
         </div>
     </div>
 </section>
 
 <!-- ===================== CALCULATOR ===================== -->
-<section class="hm-sec on-paper" id="math" style="padding-top:0">
+<section class="hm-sec" id="math">
     <div class="hm-wrap">
         <div class="hm-sec-head center">
             <p class="hm-eyebrow" style="justify-content:center">The math</p>
@@ -385,7 +412,7 @@ $tools = [
                 </div>
 
                 <div class="hm-calc-cta">
-                    <a class="hm-btn hm-btn-gold hm-btn-block" href="#pricing">Get the tools that find these →</a>
+                    <a class="hm-btn hm-btn-primary hm-btn-block" href="#pricing">Get the tools that find these →</a>
                 </div>
             </div>
         </div>
@@ -393,7 +420,7 @@ $tools = [
 </section>
 
 <!-- ===================== TOOLS ===================== -->
-<section class="hm-sec hm-tools" id="tools">
+<section class="hm-sec on-tint" id="tools">
     <div class="hm-wrap">
         <div class="hm-sec-head center">
             <p class="hm-eyebrow" style="justify-content:center">Inside the members area</p>
@@ -417,7 +444,7 @@ $tools = [
 </section>
 
 <!-- ===================== PRICING ===================== -->
-<section class="hm-sec on-paper" id="pricing">
+<section class="hm-sec on-soft" id="pricing">
     <div class="hm-wrap">
         <div class="hm-sec-head center">
             <p class="hm-eyebrow" style="justify-content:center">Pricing</p>
@@ -452,7 +479,7 @@ $tools = [
                     <?php foreach ($paidFeatures as $f): ?><li><?= e($f) ?></li><?php endforeach; ?>
                 </ul>
                 <div class="cta">
-                    <a class="hm-btn hm-btn-gold" href="/signup.php?plan=<?= e($paidSlug) ?>">Get all access</a>
+                    <a class="hm-btn hm-btn-primary" href="/signup.php?plan=<?= e($paidSlug) ?>">Get all access</a>
                 </div>
             </div>
         </div>
@@ -473,8 +500,8 @@ $tools = [
                 what they really sell for, and the number to stop at.
             </p>
             <div class="hm-cta-row">
-                <a class="hm-btn hm-btn-dark hm-btn-lg" href="/signup.php">Get the daily email — free</a>
-                <a class="hm-btn hm-btn-clear hm-btn-lg" href="#pricing">See all-access</a>
+                <a class="hm-btn hm-btn-white hm-btn-lg" href="/signup.php">Get the daily email — free</a>
+                <a class="hm-btn hm-btn-clear-white hm-btn-lg" href="#pricing">See all-access</a>
             </div>
             <p class="hm-cta-fine">Free tier forever · <?= e($paidPrice) ?>/<?= e($paidCycle) ?> for every tool · Cancel anytime</p>
         </div>
