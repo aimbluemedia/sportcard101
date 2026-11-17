@@ -169,10 +169,10 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 .hm-hero::after { content: ''; position: absolute; inset: auto 0 0 0; height: 1px; background: var(--border); }
 .hm-hero > * { position: relative; }
 
-/* 25% copy / 75% photo.
-   Top-aligned, not centred: at 75% the photo is taller than the viewport, and
-   centring the copy against it pushed the email form below the fold. */
-.hm-hero-grid { display: grid; grid-template-columns: minmax(0, .5fr) minmax(0, 1.5fr); gap: clamp(24px, 3vw, 44px); align-items: start; }
+/* 40% copy / 60% photo.
+   Top-aligned, not centred: the photo is taller than the viewport, and
+   centring the copy against it pushes the email form below the fold. */
+.hm-hero-grid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: clamp(28px, 3.4vw, 50px); align-items: start; }
 .hm-hero-copy { padding-top: clamp(16px, 5vh, 64px); }
 
 @media (max-width: 1000px) {
@@ -194,22 +194,18 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 @keyframes hm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 .hm-pill b { color: var(--ink); font-weight: 700; }
 
-/* the copy column is only a quarter of the row, so the display type is
-   sized to that column rather than to the viewport */
-.hm-hero h1 { font-size: clamp(1.9rem, 2.5vw, 2.4rem); letter-spacing: -.03em; color: var(--blue-700); }
+/* the copy column is 40% of the row, so the display type is sized to that
+   column rather than to the viewport */
+.hm-hero h1 { font-size: clamp(2rem, 3.5vw, 3.05rem); letter-spacing: -.032em; color: var(--blue-700); }
 .hm-hero h1 .hl { color: var(--blue-600); }
-.hm-hero-sub { font-size: clamp(.95rem, 1.1vw, 1.02rem); color: var(--ink-2); margin: 16px 0 0; max-width: 54ch; }
+.hm-hero-sub { font-size: clamp(.98rem, 1.3vw, 1.08rem); color: var(--ink-2); margin: 18px 0 0; max-width: 54ch; }
 .hm-hero-sub strong { color: var(--ink); }
 
 /* hero email capture */
 .hm-capture { margin: 24px 0 0; }
-/* stacked by default: at 25% of the row the column is too narrow for an
-   input and a button side by side. It goes back to a row once the hero
-   collapses to one full-width column. */
-.hm-capture form { display: flex; flex-direction: column; gap: 10px; max-width: 492px; }
-@media (min-width: 521px) and (max-width: 1000px) {
-    .hm-capture form { flex-direction: row; }
-}
+/* a row wherever there is width for an input beside a button; stacked only
+   on narrow phones */
+.hm-capture form { display: flex; gap: 10px; max-width: 492px; }
 .hm-capture input[type=email] {
     flex: 1; min-width: 0; padding: 14px 18px; border-radius: 999px;
     background: #fff; border: 1px solid var(--border-2);
