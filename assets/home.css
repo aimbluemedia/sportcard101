@@ -169,15 +169,17 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 .hm-hero::after { content: ''; position: absolute; inset: auto 0 0 0; height: 1px; background: var(--border); }
 .hm-hero > * { position: relative; }
 
-/* 40% copy / 60% photo.
-   Top-aligned, not centred: the photo is taller than the viewport, and
-   centring the copy against it pushes the email form below the fold. */
-.hm-hero-grid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: clamp(28px, 3.4vw, 50px); align-items: start; }
-.hm-hero-copy { padding-top: clamp(16px, 5vh, 64px); }
+/* 40% copy / 60% photo, both columns the same height.
+   The copy column sets the row height and the photo stretches to match it,
+   so the two sides start and finish together. */
+.hm-hero-grid { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: clamp(28px, 3.4vw, 50px); align-items: stretch; }
+.hm-hero-copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(18px, 4vh, 46px) 0; }
+/* flex children stretch across the cross axis by default, which would pull
+   the status pill out to the full column width */
+.hm-hero-copy > .hm-pill { align-self: flex-start; }
 
 @media (max-width: 1000px) {
-    .hm-hero-grid { align-items: center; }
-    .hm-hero-copy { padding-top: 0; }
+    .hm-hero-copy { padding: 0; }
 }
 
 .hm-pill {
@@ -244,12 +246,22 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 .hm-photo {
     position: relative; border-radius: 22px; overflow: hidden;
     box-shadow: 0 30px 60px -28px rgba(13, 31, 51, .45), 0 0 0 1px rgba(13, 31, 51, .05);
-    /* No max-height here: with aspect-ratio set, capping the height shrinks
-       the width to match and the photo loses its 75% share of the row. The
-       hero is simply tall, as in the reference. */
+    /* Portrait while the hero is stacked; on the two-column layout below the
+       height comes from the copy column instead. Never cap the height while
+       aspect-ratio is in play — that shrinks the width to match and the photo
+       silently loses its share of the row. */
     aspect-ratio: 4 / 5; background: var(--blue-100);
 }
 .hm-photo img { width: 100%; max-width: 100%; height: 100%; object-fit: cover; display: block; }
+
+@media (min-width: 1001px) {
+    /* The image is taken out of flow so it contributes no intrinsic height —
+       otherwise its 1149px would set the row height and the stretch would
+       have nothing to do. */
+    .hm-photo { aspect-ratio: auto; height: 100%; min-height: 470px; }
+    .hm-photo picture { position: absolute; inset: 0; display: block; }
+    .hm-photo img { position: absolute; inset: 0; object-position: 50% 14%; }
+}
 .hm-photo::after {
     content: ''; position: absolute; inset: 0; pointer-events: none;
     background: linear-gradient(200deg, transparent 48%, rgba(13, 31, 51, .3) 100%);
