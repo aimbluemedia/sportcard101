@@ -602,11 +602,14 @@ input[type=range].hm-range::-moz-range-thumb {
    PRICING
    ========================================================================== */
 
-.hm-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 48px auto 0; max-width: 860px; align-items: start; }
+/* stretch, not start: every card takes the height of the tallest, however
+   many plans there are, and each one's button is pushed to its foot */
+.hm-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 48px auto 0; max-width: 860px; align-items: stretch; }
 
 .hm-plan {
     background: #fff; border: 1px solid var(--border); border-radius: 20px;
     padding: 30px 28px; position: relative;
+    display: flex; flex-direction: column;
     box-shadow: 0 1px 2px rgba(15, 31, 51, .04);
 }
 .hm-plan.feat {
@@ -641,7 +644,9 @@ input[type=range].hm-range::-moz-range-thumb {
     background: var(--green-50); color: var(--green);
 }
 .hm-plan.feat li::before { background: rgba(34, 197, 94, .18); color: var(--green-2); }
-.hm-plan .cta { margin-top: 26px; }
+/* margin-top:auto eats the leftover space in the shorter card, so the
+   buttons line up across the row instead of floating mid-card */
+.hm-plan .cta { margin-top: auto; padding-top: 26px; }
 .hm-plan .cta .hm-btn { width: 100%; }
 
 .hm-price-foot { text-align: center; margin: 28px 0 0; font-size: .86rem; color: var(--ink-2); }
