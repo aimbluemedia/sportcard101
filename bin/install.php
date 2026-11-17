@@ -40,7 +40,7 @@ if ((int)$pdo->query('SELECT COUNT(*) FROM plans')->fetchColumn() === 0) {
     );
     $plan->execute(['Free', 'free', 0, 'month', 'Start learning the hobby.',
         "Top 3 daily AI deals\nFree starter lessons\nMember community", 0]);
-    $plan->execute(['Pro', 'pro', 1900, 'month', 'The full deal engine + all lessons.',
+    $plan->execute(['Pro', 'pro', 900, 'month', 'The full deal engine + all lessons.',
         "Full AI deal board\nFlip-margin math\nHidden-gem alerts\nAll lessons & courses\nAffiliate program", 1]);
     echo "Seeded Free + Pro plans.\n";
 }

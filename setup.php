@@ -54,7 +54,7 @@ if (!$alreadySetUp && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ((int)$pdo->query('SELECT COUNT(*) FROM plans')->fetchColumn() === 0) {
                     $plan = $pdo->prepare('INSERT INTO plans (name, slug, price_cents, bill_interval, blurb, features, is_active, sort) VALUES (?,?,?,?,?,?,1,?)');
                     $plan->execute(['Free', 'free', 0, 'month', 'Start learning the hobby.', "Top 3 daily AI deals\nFree starter lessons\nMember community", 0]);
-                    $plan->execute(['Pro', 'pro', 1900, 'month', 'The full deal engine + all lessons.', "Full AI deal board\nFlip-margin math\nHidden-gem alerts\nAll lessons & courses\nAffiliate program", 1]);
+                    $plan->execute(['Pro', 'pro', 900, 'month', 'The full deal engine + all lessons.', "Full AI deal board\nFlip-margin math\nHidden-gem alerts\nAll lessons & courses\nAffiliate program", 1]);
                 }
                 $set = $pdo->prepare('INSERT IGNORE INTO settings (skey, sval) VALUES (?, ?)');
                 foreach ([
