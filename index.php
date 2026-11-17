@@ -249,14 +249,20 @@ $tools = [
     <div class="hm-wrap">
         <div class="hm-sec-head">
             <p class="hm-eyebrow">How it works</p>
-            <h2 class="hm-h2">Find it. Price it. Flip it.</h2>
+            <h2 class="hm-h2">Find it. Price it. <span class="hl">Flip it.</span></h2>
             <p class="hm-lede">
-                Three steps, and the third is the one almost everybody skips. Flipping cards
-                is not about taste — it is about refusing to pay more than the math allows.
+                Every card worth buying is on a clock. The engine finds it, prices it against
+                what it really sold for, and hands you a hard ceiling — <strong>while the auction
+                is still open</strong>, not after someone else has won it.
+            </p>
+            <p class="hm-live">
+                <span class="live"><i></i> Live</span>
+                <span>Sweeping eBay every <b>30 minutes</b>, day and night, while you are not watching.</span>
             </p>
         </div>
 
         <div class="hm-how-grid">
+          <div class="hm-panel-col">
             <!-- what the Morning Playbook actually looks like -->
             <div class="hm-panel">
                 <div class="hm-mock-bar">
@@ -279,7 +285,7 @@ $tools = [
                         <span class="rank">1</span>
                         <span class="who">
                             <span class="nm">2018 Prizm Luka Dončić RC #280</span>
-                            <span class="mt"><span class="g">PSA 10</span> <span>median $578 · 11 sales</span></span>
+                            <span class="mt"><span class="g">PSA 10</span> <span>median $578</span> <span class="ends">ends 4h 12m</span></span>
                         </span>
                         <span class="max"><span class="lbl">Max bid</span><span class="v">$412</span></span>
                         <span class="pl">+$89</span>
@@ -288,7 +294,7 @@ $tools = [
                         <span class="rank">2</span>
                         <span class="who">
                             <span class="nm">2000 Bowman Chrome Brady RC #236</span>
-                            <span class="mt"><span class="g">BGS 9</span> <span>median $1,240 · 7 sales</span></span>
+                            <span class="mt"><span class="g">BGS 9</span> <span>median $1,240</span> <span class="ends">ends 2h 06m</span></span>
                         </span>
                         <span class="max"><span class="lbl">Max bid</span><span class="v">$905</span></span>
                         <span class="pl">+$170</span>
@@ -297,7 +303,7 @@ $tools = [
                         <span class="rank">3</span>
                         <span class="who">
                             <span class="nm">1989 Upper Deck Ken Griffey Jr. RC #1</span>
-                            <span class="mt"><span class="g">PSA 9</span> <span>median $96 · 24 sales</span></span>
+                            <span class="mt"><span class="g">PSA 9</span> <span>median $96</span> <span class="ends hot">ends 41m</span></span>
                         </span>
                         <span class="max"><span class="lbl">Max bid</span><span class="v">$61</span></span>
                         <span class="pl">+$17</span>
@@ -309,6 +315,18 @@ $tools = [
                     <span class="pb">Sent 7:00am</span>
                 </div>
             </div>
+
+            <aside class="hm-panel-cta">
+                <span class="k"><span class="dot"></span> Auctions do not wait</span>
+                <h3>Tomorrow's list, in your inbox at 7am.</h3>
+                <p>
+                    Most of a morning's list has closed by the evening. You either had the
+                    number before the bidding started, or you watched someone else take the spread.
+                </p>
+                <a class="hm-btn hm-btn-white hm-btn-block" href="/signup.php">Get the daily email — free</a>
+                <span class="fine">Free forever · no card · one email a morning</span>
+            </aside>
+          </div><!-- /.hm-panel-col -->
 
             <div class="hm-steps-stack">
                 <article class="hm-step">
