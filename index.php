@@ -167,7 +167,7 @@ $tools = [
 <!-- ===================== HERO ===================== -->
 <section class="hm-hero">
     <div class="hm-wrap hm-hero-grid">
-        <div>
+        <div class="hm-hero-copy">
             <span class="hm-pill"><span class="dot"></span> Scanning eBay every <b>30 minutes</b></span>
 
             <h1><?= $marked($heroTitle, '<span class="hl">', '</span>') ?></h1>
@@ -192,7 +192,7 @@ $tools = [
             <div class="hm-photo">
                 <picture>
                     <source srcset="/assets/img/hero-desk.webp" type="image/webp">
-                    <img src="/assets/img/hero-desk.jpg" width="658" height="822" loading="eager" decoding="async"
+                    <img src="/assets/img/hero-desk.jpg" width="920" height="1149" loading="eager" decoding="async"
                          alt="A seller at a desk with graded cards on the shelves behind, a laptop, card savers and a packed shipping box.">
                 </picture>
             </div>

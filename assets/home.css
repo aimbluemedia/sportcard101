@@ -169,7 +169,16 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 .hm-hero::after { content: ''; position: absolute; inset: auto 0 0 0; height: 1px; background: var(--border); }
 .hm-hero > * { position: relative; }
 
-.hm-hero-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(28px, 4vw, 56px); align-items: center; }
+/* 25% copy / 75% photo.
+   Top-aligned, not centred: at 75% the photo is taller than the viewport, and
+   centring the copy against it pushed the email form below the fold. */
+.hm-hero-grid { display: grid; grid-template-columns: minmax(0, .5fr) minmax(0, 1.5fr); gap: clamp(24px, 3vw, 44px); align-items: start; }
+.hm-hero-copy { padding-top: clamp(16px, 5vh, 64px); }
+
+@media (max-width: 1000px) {
+    .hm-hero-grid { align-items: center; }
+    .hm-hero-copy { padding-top: 0; }
+}
 
 .hm-pill {
     display: inline-flex; align-items: center; gap: 9px; padding: 6px 15px 6px 11px;
@@ -185,14 +194,22 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 @keyframes hm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 .hm-pill b { color: var(--ink); font-weight: 700; }
 
-.hm-hero h1 { font-size: clamp(2.2rem, 5.1vw, 3.75rem); letter-spacing: -.035em; color: var(--blue-700); }
+/* the copy column is only a quarter of the row, so the display type is
+   sized to that column rather than to the viewport */
+.hm-hero h1 { font-size: clamp(1.9rem, 2.5vw, 2.4rem); letter-spacing: -.03em; color: var(--blue-700); }
 .hm-hero h1 .hl { color: var(--blue-600); }
-.hm-hero-sub { font-size: clamp(1.02rem, 1.6vw, 1.16rem); color: var(--ink-2); margin: 22px 0 0; max-width: 54ch; }
+.hm-hero-sub { font-size: clamp(.95rem, 1.1vw, 1.02rem); color: var(--ink-2); margin: 16px 0 0; max-width: 54ch; }
 .hm-hero-sub strong { color: var(--ink); }
 
 /* hero email capture */
-.hm-capture { margin: 30px 0 0; }
-.hm-capture form { display: flex; gap: 10px; max-width: 492px; }
+.hm-capture { margin: 24px 0 0; }
+/* stacked by default: at 25% of the row the column is too narrow for an
+   input and a button side by side. It goes back to a row once the hero
+   collapses to one full-width column. */
+.hm-capture form { display: flex; flex-direction: column; gap: 10px; max-width: 492px; }
+@media (min-width: 521px) and (max-width: 1000px) {
+    .hm-capture form { flex-direction: row; }
+}
 .hm-capture input[type=email] {
     flex: 1; min-width: 0; padding: 14px 18px; border-radius: 999px;
     background: #fff; border: 1px solid var(--border-2);
@@ -231,6 +248,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 .hm-photo {
     position: relative; border-radius: 22px; overflow: hidden;
     box-shadow: 0 30px 60px -28px rgba(13, 31, 51, .45), 0 0 0 1px rgba(13, 31, 51, .05);
+    /* No max-height here: with aspect-ratio set, capping the height shrinks
+       the width to match and the photo loses its 75% share of the row. The
+       hero is simply tall, as in the reference. */
     aspect-ratio: 4 / 5; background: var(--blue-100);
 }
 .hm-photo img { width: 100%; max-width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -241,7 +261,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 
 /* today's top call — the compact card floating over the photo's lower-left */
 .hm-call {
-    position: absolute; left: -56px; bottom: 54px; width: min(300px, 86%); z-index: 5;
+    /* positioned from the top, not the bottom: at 75% width the photo is
+       taller than the viewport and a bottom-anchored card lands below the fold */
+    position: absolute; left: -28px; top: 46%; width: min(300px, 86%); z-index: 5;
     display: grid; gap: 2px; padding: 15px 17px 14px;
     background: #fff; border-radius: 15px;
     box-shadow: 0 24px 50px -16px rgba(13, 31, 51, .4), 0 0 0 1px rgba(13, 31, 51, .05);
@@ -353,7 +375,7 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
     border-radius: 999px; padding: 8px 17px 8px 8px;
 }
 .hm-chip-new  { top: 32px;  left: -48px; animation-delay: -1.2s; }
-.hm-chip-time { top: 46%;   right: -38px; animation-delay: -3s; }
+.hm-chip-time { top: 32%;   right: -38px; animation-delay: -3s; }
 
 /* the daily-email card */
 .hm-chip-mail {
