@@ -141,7 +141,7 @@ $tools = [
 <!-- ===================== NAV ===================== -->
 <header class="hm-nav">
     <div class="hm-wrap hm-nav-in">
-        <a class="hm-brand" href="/"><span class="chip">🃏</span> Sport<b>Card101</b></a>
+        <a class="hm-brand" href="/"><span class="chip">🃏</span><span class="word">Sport<b>Card101</b></span></a>
         <nav class="hm-nav-links">
             <a href="#how">How it works</a>
             <a href="#math">The math</a>
@@ -542,7 +542,7 @@ $tools = [
     <div class="hm-wrap">
         <div class="hm-foot-grid">
             <div class="hm-foot-brand">
-                <a class="hm-brand" href="/"><span class="chip">🃏</span> Sport<b>Card101</b></a>
+                <a class="hm-brand" href="/"><span class="chip">🃏</span><span class="word">Sport<b>Card101</b></span></a>
                 <p>Learn the hobby, find the deals, and keep a ledger that tells you the truth about your flips.</p>
             </div>
             <div>

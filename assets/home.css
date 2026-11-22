@@ -138,6 +138,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 .hm-nav-in { display: flex; align-items: center; gap: 28px; height: 70px; }
 
 .hm-brand { display: flex; align-items: center; gap: 9px; font-size: 1.14rem; font-weight: 800; letter-spacing: -.03em; color: var(--blue-700); }
+/* one flex item, not two: gap would otherwise open a 9px space inside the
+   wordmark and render it as "Sport Card101" */
+.hm-brand .word { display: inline-flex; }
 .hm-brand b { color: var(--blue-600); font-weight: 800; }
 .hm-brand .chip {
     width: 30px; height: 30px; flex: none; border-radius: 9px; display: grid; place-items: center;
