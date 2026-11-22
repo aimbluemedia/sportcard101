@@ -162,14 +162,28 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
    ========================================================================== */
 
 .hm-hero {
-    position: relative; overflow: hidden;
-    padding: clamp(52px, 7vw, 86px) 0 clamp(60px, 7vw, 96px);
-    background:
-        radial-gradient(60% 70% at 85% 8%, rgba(29, 109, 201, .1), transparent 60%),
-        linear-gradient(180deg, var(--blue-50) 0%, #fdfeff 72%, var(--bg) 100%);
+    position: relative; isolation: isolate; overflow: hidden;
+    padding: clamp(56px, 7vw, 92px) 0 clamp(64px, 7vw, 100px);
+    background: var(--blue-900);
 }
-.hm-hero::after { content: ''; position: absolute; inset: auto 0 0 0; height: 1px; background: var(--border); }
-.hm-hero > * { position: relative; }
+
+/* full-bleed photo behind the whole hero */
+.hm-hero-bg { position: absolute !important; inset: 0; z-index: 0; }
+.hm-hero-bg picture { display: block; width: 100%; height: 100%; }
+.hm-hero-bg img {
+    width: 100%; height: 100%; object-fit: cover;
+    object-position: 50% 30%; display: block;
+}
+/* Scrim. The left stop is held near-opaque out to 46% on purpose: the shop's
+   own signage sits at roughly 26-55% across this photo, and the crop cannot
+   exclude it without losing the subject's face. Darkness is what hides it. */
+.hm-hero-bg::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background:
+        linear-gradient(90deg, rgba(7,14,28,.97) 0%, rgba(7,14,28,.96) 46%, rgba(7,14,28,.7) 70%, rgba(7,14,28,.8) 100%),
+        linear-gradient(180deg, rgba(7,14,28,.55) 0%, rgba(7,14,28,0) 26%, rgba(7,14,28,0) 56%, rgba(7,14,28,.66) 100%);
+}
+.hm-hero > .hm-wrap { position: relative; z-index: 1; }
 
 /* 40% copy / 60% photo, both columns the same height.
    The copy column sets the row height and the photo stretches to match it,
@@ -186,9 +200,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 
 .hm-pill {
     display: inline-flex; align-items: center; gap: 9px; padding: 6px 15px 6px 11px;
-    border-radius: 999px; background: #fff; border: 1px solid var(--border-2);
-    font-size: .8rem; font-weight: 600; color: var(--ink-2); margin-bottom: 24px;
-    box-shadow: 0 2px 8px -4px rgba(15, 31, 51, .18);
+    border-radius: 999px; background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .22);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    font-size: .8rem; font-weight: 600; color: rgba(255, 255, 255, .88); margin-bottom: 24px;
 }
 .hm-pill .dot {
     width: 7px; height: 7px; border-radius: 50%; background: var(--green);
@@ -196,14 +210,14 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
     animation: hm-pulse 2.2s ease-in-out infinite;
 }
 @keyframes hm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
-.hm-pill b { color: var(--ink); font-weight: 700; }
+.hm-pill b { color: #fff; font-weight: 700; }
 
 /* the copy column is 40% of the row, so the display type is sized to that
    column rather than to the viewport */
-.hm-hero h1 { font-size: clamp(2rem, 3.5vw, 3.05rem); letter-spacing: -.032em; color: var(--blue-700); }
-.hm-hero h1 .hl { color: var(--blue-600); }
-.hm-hero-sub { font-size: clamp(.98rem, 1.3vw, 1.08rem); color: var(--ink-2); margin: 18px 0 0; max-width: 54ch; }
-.hm-hero-sub strong { color: var(--ink); }
+.hm-hero h1 { font-size: clamp(2rem, 3.5vw, 3.05rem); letter-spacing: -.032em; color: #fff; }
+.hm-hero h1 .hl { color: var(--blue-300); box-shadow: inset 0 -2px 0 0 rgba(143, 192, 238, .55); }
+.hm-hero-sub { font-size: clamp(.98rem, 1.3vw, 1.08rem); color: rgba(255, 255, 255, .84); margin: 18px 0 0; max-width: 54ch; }
+.hm-hero-sub strong { color: #fff; font-weight: 700; }
 
 /* hero email capture */
 .hm-capture { margin: 24px 0 0; }
@@ -212,19 +226,19 @@ h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.022em; line-heig
 .hm-capture form { display: flex; gap: 10px; max-width: 492px; }
 .hm-capture input[type=email] {
     flex: 1; min-width: 0; padding: 14px 18px; border-radius: 999px;
-    background: #fff; border: 1px solid var(--border-2);
-    color: var(--ink); font-size: .98rem; font-family: inherit;
-    box-shadow: 0 2px 8px -5px rgba(15, 31, 51, .25);
+    background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .28);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    color: #fff; font-size: .98rem; font-family: inherit;
     transition: border-color .15s ease, box-shadow .15s ease;
 }
-.hm-capture input[type=email]::placeholder { color: var(--muted-2); }
+.hm-capture input[type=email]::placeholder { color: rgba(255, 255, 255, .6); }
 .hm-capture input[type=email]:focus {
-    outline: none; border-color: var(--blue-500);
-    box-shadow: 0 0 0 4px rgba(29, 109, 201, .14);
+    outline: none; border-color: rgba(143, 192, 238, .85); background: rgba(255, 255, 255, .18);
+    box-shadow: 0 0 0 4px rgba(61, 138, 224, .25);
 }
-.hm-capture-note { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 16px 0 0; font-size: .85rem; color: var(--muted); }
+.hm-capture-note { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 16px 0 0; font-size: .85rem; color: rgba(255, 255, 255, .78); }
 .hm-capture-note span { display: inline-flex; align-items: center; gap: 7px; }
-.hm-capture-note span::before { content: '✓'; color: var(--green); font-weight: 800; }
+.hm-capture-note span::before { content: '✓'; color: var(--green-2); font-weight: 800; }
 
 /* Grid children must be allowed to shrink: the playbook panel has a wide
    min-content size and would otherwise blow the single-column layout out
@@ -774,4 +788,70 @@ input[type=range].hm-range::-moz-range-thumb {
     html { scroll-behavior: auto; }
     .hm-chip, .hm-call, .hm-pill .dot { animation: none; }
     .hm-btn:hover, .hm-step:hover, .hm-tool:hover { transform: none; }
+}
+
+/* ==========================================================================
+   HERO OVERLAY CARDS
+   The hero sits on a photo now, so the cards that float over it are dark
+   glass rather than white. Scoped to .hm-hero so the same classes keep their
+   light styling in the "How it works" section further down the page.
+   ========================================================================== */
+
+.hm-hero .hm-shot { min-height: clamp(380px, 42vw, 470px); }
+
+.hm-hero .hm-chip,
+.hm-hero .hm-call {
+    background: rgba(13, 22, 40, .72);
+    border: 1px solid rgba(255, 255, 255, .14);
+    backdrop-filter: saturate(140%) blur(16px);
+    -webkit-backdrop-filter: saturate(140%) blur(16px);
+    box-shadow: 0 26px 54px -20px rgba(0, 0, 0, .7);
+}
+.hm-hero .hm-chip .tx { color: rgba(255, 255, 255, .84); }
+.hm-hero .hm-chip .tx b { color: #fff; }
+
+.hm-hero .hm-chip-mail .hd { color: #fff; }
+.hm-hero .hm-chip-mail p { color: rgba(255, 255, 255, .7); }
+.hm-hero .hm-chip-mail .ft { color: rgba(255, 255, 255, .55); border-top-color: rgba(255, 255, 255, .14); }
+.hm-hero .hm-chip-mail .ft em { color: var(--green-2); }
+
+.hm-hero .hm-call .k { color: rgba(255, 255, 255, .6); }
+.hm-hero .hm-call .k em {
+    color: rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .1);
+    border-color: rgba(255, 255, 255, .2);
+}
+.hm-hero .hm-call .nm { color: #fff; }
+.hm-hero .hm-call .mt { color: rgba(255, 255, 255, .66); }
+.hm-hero .hm-call .row { border-top-color: rgba(255, 255, 255, .14); }
+.hm-hero .hm-call .row .lbl { color: rgba(255, 255, 255, .55); }
+.hm-hero .hm-call .row .v { color: #fff; }
+.hm-hero .hm-call .row .pl {
+    color: var(--green-2); background: rgba(34, 197, 94, .16); border-color: rgba(34, 197, 94, .34);
+}
+
+/* the ghost CTA needs to read on a photo, not on white */
+.hm-hero .hm-btn-ghost {
+    background: rgba(255, 255, 255, .12); color: #fff; border-color: rgba(255, 255, 255, .3);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.hm-hero .hm-btn-ghost:hover { background: rgba(255, 255, 255, .2); border-color: #fff; color: #fff; }
+
+@media (max-width: 1000px) {
+    /* stacked: the cards sit under the copy, still over the photo */
+    .hm-hero .hm-shot { min-height: 330px; margin-top: 34px; }
+}
+@media (max-width: 560px) {
+    .hm-hero .hm-shot { min-height: 300px; }
+    .hm-hero .hm-call { position: absolute; left: 0; right: 0; width: auto; bottom: 0; }
+}
+
+/* Narrow viewports crop a tall slice out of the middle of the hero photo,
+   which brings the shop's own signage into frame. Push the crop down to the
+   table so the background stays scenery and carries no other brand's name. */
+@media (max-width: 760px) {
+    .hm-hero-bg img { object-position: 62% 34%; }
+    .hm-hero-bg::after {
+        background:
+            linear-gradient(180deg, rgba(7,14,28,.92) 0%, rgba(7,14,28,.86) 48%, rgba(7,14,28,.72) 100%);
+    }
 }

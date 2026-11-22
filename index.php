@@ -166,6 +166,13 @@ $tools = [
 
 <!-- ===================== HERO ===================== -->
 <section class="hm-hero">
+    <div class="hm-hero-bg" aria-hidden="true">
+        <picture>
+            <source srcset="/assets/img/hero-wide.webp" type="image/webp">
+            <img src="/assets/img/hero-wide.jpg" width="1800" height="1350" loading="eager" decoding="async" alt="">
+        </picture>
+    </div>
+
     <div class="hm-wrap hm-hero-grid">
         <div class="hm-hero-copy">
             <span class="hm-pill"><span class="dot"></span> Scanning eBay every <b>30 minutes</b></span>
@@ -189,14 +196,6 @@ $tools = [
 
         <!-- shop photo, with today's top call and the email receipt floating over it -->
         <div class="hm-shot">
-            <div class="hm-photo">
-                <picture>
-                    <source srcset="/assets/img/hero-desk.webp" type="image/webp">
-                    <img src="/assets/img/hero-desk.jpg" width="920" height="1149" loading="eager" decoding="async"
-                         alt="A seller at a desk with graded cards on the shelves behind, a laptop, card savers and a packed shipping box.">
-                </picture>
-            </div>
-
             <!-- a new deal lands -->
             <div class="hm-chip hm-chip-new">
                 <span class="ic dark">⚡</span>
