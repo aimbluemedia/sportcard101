@@ -44,6 +44,10 @@ final class DealAlerts
         \set_setting('alerts_last_error', '');
         \set_setting('alerts_last_sent', date('Y-m-d H:i:s'));
 
+        // Keep a copy for the members-area history. Only sent mail is recorded,
+        // so the page can never show an alert nobody received.
+        self::record($pdo, $matches);
+
         $mark = $pdo->prepare('UPDATE listings SET notified = 1 WHERE id = ?');
         foreach ($matches as $m) {
             $mark->execute([(int)$m['id']]);
@@ -206,6 +210,82 @@ final class DealAlerts
     }
 
     /** Normalise one match into the display fields both email formats use. */
+    /** Days of alert history kept before a send prunes the old rows. */
+    public const KEEP_DAYS = 90;
+
+    /** Create the sent-alert table when missing (idempotent). */
+    public static function ensureTable(PDO $pdo): void
+    {
+        $pdo->exec(
+            'CREATE TABLE IF NOT EXISTS alert_emails (
+                id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                sent_at     DATETIME NOT NULL,
+                match_count INT UNSIGNED NOT NULL DEFAULT 0,
+                payload     MEDIUMTEXT NOT NULL,
+                PRIMARY KEY (id),
+                KEY idx_sent (sent_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4'
+        );
+    }
+
+    /**
+     * Save what an alert email actually said, so the members area can show the
+     * history. The rendered fields are stored, not listing ids: prices, bid
+     * counts and time-left are a snapshot of the moment the mail went out, and
+     * re-reading the listings later would silently rewrite history.
+     */
+    public static function record(PDO $pdo, array $matches): bool
+    {
+        if (!$matches) {
+            return false;
+        }
+        try {
+            self::ensureTable($pdo);
+            $rows = array_map([self::class, 'displayFields'], $matches);
+            $json = json_encode($rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if ($json === false) {
+                return false;
+            }
+            $pdo->prepare('INSERT INTO alert_emails (sent_at, match_count, payload) VALUES (?, ?, ?)')
+                ->execute([date('Y-m-d H:i:s'), count($rows), $json]);
+            $pdo->prepare('DELETE FROM alert_emails WHERE sent_at < (NOW() - INTERVAL ? DAY)')
+                ->execute([self::KEEP_DAYS]);
+            return true;
+        } catch (\Throwable $e) {
+            // History is a convenience. Never let it break the alert run.
+            return false;
+        }
+    }
+
+    /**
+     * Sent alerts, newest first. Each row's payload is decoded into 'items'.
+     * Pass a limit to cap how many emails come back.
+     */
+    public static function history(PDO $pdo, int $limit = 60): array
+    {
+        try {
+            self::ensureTable($pdo);
+            $limit = max(1, min($limit, 500));
+            $rows = $pdo->query(
+                "SELECT id, sent_at, match_count, payload FROM alert_emails
+                 ORDER BY sent_at DESC, id DESC LIMIT {$limit}"
+            )->fetchAll();
+        } catch (\Throwable $e) {
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $items = json_decode((string) $r['payload'], true);
+            $out[] = [
+                'id'          => (int) $r['id'],
+                'sent_at'     => (string) $r['sent_at'],
+                'match_count' => (int) $r['match_count'],
+                'items'       => is_array($items) ? $items : [],
+            ];
+        }
+        return $out;
+    }
+
     private static function displayFields(array $m): array
     {
         $hrs = (int) max(0, round((float)$m['hours_left']));
